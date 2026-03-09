@@ -250,21 +250,36 @@ export default function PersonaChat() {
     }
   };
 
-  const selectCharacter = (char) => {
+  const selectCharacter = async (char) => {
     setSelectedChar(char);
-    setMessages([{ role: "assistant", content: char.greeting, id: Date.now() }]);
+    let initial = [{ role: "assistant", content: char.greeting, id: Date.now() }];
+    try {
+      const res = await fetch(`/api/history?charId=${char.id}`);
+      const data = await res.json();
+      if (Array.isArray(data.messages) && data.messages.length > 0) {
+        initial = data.messages;
+      }
+    } catch {}
+    setMessages(initial);
     setPhase("chat");
     setTimeout(() => inputRef.current?.focus(), 300);
+  };
+
+  const clearHistory = async () => {
+    if (!selectedChar) return;
+    try { await fetch(`/api/history?charId=${selectedChar.id}`, { method: "DELETE" }); } catch {}
+    setMessages([{ role: "assistant", content: selectedChar.greeting, id: Date.now() }]);
   };
 
   const sendMessage = async () => {
     if (!input.trim() || isTyping || !selectedChar) return;
     const userMsg = { role: "user", content: input.trim(), id: Date.now() };
     setInput("");
-    setMessages((prev) => [...prev, userMsg]);
+    const messagesWithUser = [...messages, userMsg];
+    setMessages(messagesWithUser);
     setIsTyping(true);
     try {
-      const history = [...messages, userMsg].map((m) => ({ role: m.role, content: m.content }));
+      const history = messagesWithUser.map((m) => ({ role: m.role, content: m.content }));
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -280,7 +295,14 @@ export default function PersonaChat() {
       }
 
       const text = data?.text || "...";
-      setMessages((prev) => [...prev, { role: "assistant", content: text, id: Date.now() }]);
+      const aiMsg = { role: "assistant", content: text, id: Date.now() };
+      const updated = [...messagesWithUser, aiMsg];
+      setMessages(updated);
+      fetch("/api/history", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ charId: selectedChar.id, messages: updated }),
+      }).catch(() => {});
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to get chat response";
       setMessages((prev) => [
@@ -449,6 +471,8 @@ export default function PersonaChat() {
         .p3send{background:linear-gradient(145deg,var(--sys-accent-soft),rgba(255,255,255,.08));border:1px solid var(--sys-accent);color:var(--sys-text);font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:1.4px;padding:13px 20px;cursor:pointer;transition:all .2s;border-radius:999px;white-space:nowrap;text-transform:uppercase;}
         .p3send:hover:not(:disabled){transform:translateY(-1px);box-shadow:0 10px 20px rgba(36,95,191,.32),0 0 0 1px rgba(127,216,255,.6);}
         .p3send:disabled{opacity:.4;cursor:not-allowed;}
+        .p3clrhist{font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:1.2px;padding:4px 10px;border:1px solid rgba(242,95,111,.45);background:transparent;color:rgba(242,95,111,.8);cursor:pointer;border-radius:999px;transition:all .15s;text-transform:uppercase;}
+        .p3clrhist:hover{background:rgba(242,95,111,.15);border-color:#f25f6f;color:#f25f6f;}
 
         @media (max-width: 760px) {
           .p3fg { grid-template-columns: 1fr; }
@@ -710,6 +734,9 @@ export default function PersonaChat() {
               <div className="p3stat">
               <div className="p3dot" />
               <div className="p3stxt">FREEBASE LINK — CONNECTION ACTIVE</div>
+              <button className="p3clrhist" style={{ marginLeft: "auto" }} onClick={clearHistory} title="Clear saved history for this character">
+                CLEAR HISTORY
+              </button>
               <div className="p3stime">{new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</div>
             </div>
             <div className="p3msgs">
