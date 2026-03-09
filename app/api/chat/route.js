@@ -1,6 +1,99 @@
 import { NextResponse } from "next/server";
 
 const DEFAULT_MODEL = process.env.ANTHROPIC_MODEL || "claude-sonnet-4-20250514";
+const MAX_LINKS = 3;
+const MAX_SNIPPET_LENGTH = 4000;
+
+const extractUrls = (messages) => {
+  const urlRegex = /https?:\/\/[^\s)\]}>"']+/gi;
+  const allText = messages.map((message) => message.content).join("\n");
+  const matches = allText.match(urlRegex) || [];
+  return [...new Set(matches)].slice(0, MAX_LINKS);
+};
+
+const stripHtml = (html) =>
+  html
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+const parseGitHubPath = (urlString) => {
+  try {
+    const url = new URL(urlString);
+    if (url.hostname !== "github.com") return null;
+    const parts = url.pathname.split("/").filter(Boolean);
+    if (parts.length < 2) return null;
+    return { owner: parts[0], repo: parts[1], parts };
+  } catch {
+    return null;
+  }
+};
+
+const fetchWithTimeout = async (url, options = {}, timeoutMs = 10000) => {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(url, {
+      ...options,
+      signal: controller.signal,
+      headers: {
+        "User-Agent": "persona-chat-link-analyzer",
+        Accept: "application/json, text/plain, text/html;q=0.9,*/*;q=0.8",
+        ...(options.headers || {}),
+      },
+    });
+    return response;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+};
+
+const summarizeLink = async (url) => {
+  try {
+    const githubInfo = parseGitHubPath(url);
+
+    if (githubInfo) {
+      const { owner, repo, parts } = githubInfo;
+
+      if (parts[2] === "blob" && parts.length >= 5) {
+        const branch = parts[3];
+        const filePath = parts.slice(4).join("/");
+        const rawUrl = `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/${filePath}`;
+        const rawRes = await fetchWithTimeout(rawUrl);
+        if (rawRes.ok) {
+          const code = (await rawRes.text()).slice(0, MAX_SNIPPET_LENGTH);
+          return `URL: ${url}\nType: GitHub file\nSummary: Raw file preview (${filePath})\nContent:\n${code}`;
+        }
+      }
+
+      const repoRes = await fetchWithTimeout(`https://api.github.com/repos/${owner}/${repo}`);
+      if (repoRes.ok) {
+        const repoData = await repoRes.json();
+        const readmeRes = await fetchWithTimeout(`https://api.github.com/repos/${owner}/${repo}/readme`, {
+          headers: { Accept: "application/vnd.github.raw+json" },
+        });
+        const readmeText = readmeRes.ok ? (await readmeRes.text()).slice(0, MAX_SNIPPET_LENGTH) : "";
+        return `URL: ${url}\nType: GitHub repository\nRepo: ${repoData.full_name}\nDescription: ${repoData.description || "N/A"}\nStars: ${repoData.stargazers_count || 0}\nPrimary language: ${repoData.language || "Unknown"}\nREADME excerpt:\n${readmeText || "No README available"}`;
+      }
+    }
+
+    const response = await fetchWithTimeout(url);
+    if (!response.ok) {
+      return `URL: ${url}\nCould not fetch content (status ${response.status}).`;
+    }
+
+    const contentType = response.headers.get("content-type") || "";
+    const rawText = await response.text();
+    const cleaned = contentType.includes("text/html") ? stripHtml(rawText) : rawText;
+    const snippet = cleaned.slice(0, MAX_SNIPPET_LENGTH);
+
+    return `URL: ${url}\nType: Web page\nExtracted text:\n${snippet || "No readable text extracted."}`;
+  } catch (error) {
+    return `URL: ${url}\nFailed to analyze link: ${error?.message || "Unknown error"}`;
+  }
+};
 
 export async function POST(request) {
   try {
@@ -21,6 +114,21 @@ export async function POST(request) {
       return NextResponse.json({ error: "Invalid request payload" }, { status: 400 });
     }
 
+    const urls = extractUrls(messages);
+    const linkSummaries = await Promise.all(urls.map((url) => summarizeLink(url)));
+    const linkContext = linkSummaries.length
+      ? `\n\nLink analysis context (from URLs shared in chat):\n${linkSummaries.join("\n\n---\n\n")}`
+      : "";
+
+    const runtimeSystemPrompt = `${systemPrompt}
+
+Functional mode instructions:
+- Stay in character by default, but prioritize usefulness and correctness.
+- If the user asks for analysis, planning, coding, debugging, or "out of character" behavior, switch to a direct assistant style.
+- You may step outside roleplay to provide practical, actionable help.
+- When links are provided, analyze them and summarize key findings before answering.
+- If link content is incomplete, say what is missing and continue with best-effort guidance.${linkContext}`;
+
     const anthropicResponse = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
@@ -31,7 +139,8 @@ export async function POST(request) {
       body: JSON.stringify({
         model: DEFAULT_MODEL,
         max_tokens: 1000,
-        system: systemPrompt,
+        system: runtimeSystemPrompt,
+        tools: [{ type: "web_search_20250305", name: "web_search" }],
         messages,
       }),
     });
