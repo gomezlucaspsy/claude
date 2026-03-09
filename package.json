@@ -4,7 +4,9 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "dev:clean": "powershell -NoProfile -Command \"if (Test-Path .next) { Remove-Item .next -Recurse -Force }; next dev\"",
     "build": "next build",
+    "rebuild": "powershell -NoProfile -Command \"if (Test-Path .next) { Remove-Item .next -Recurse -Force }; next build\"",
     "start": "next start",
     "lint": "next lint"
   },
