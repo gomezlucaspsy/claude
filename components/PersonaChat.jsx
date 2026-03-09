@@ -220,8 +220,9 @@ export default function PersonaChat() {
       } else {
         setSearchStatus("⚠️ Could not parse result. Fill manually below.");
       }
-    } catch {
-      setSearchStatus("❌ Search failed. Fill the form manually.");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Search failed";
+      setSearchStatus(`❌ ${message}`);
     } finally {
       setIsSearching(false);
     }
@@ -258,8 +259,12 @@ export default function PersonaChat() {
 
       const text = data?.text || "...";
       setMessages((prev) => [...prev, { role: "assistant", content: text, id: Date.now() }]);
-    } catch {
-      setMessages((prev) => [...prev, { role: "assistant", content: "...The connection was severed. Something stirs in the Dark Hour.", id: Date.now() }]);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to get chat response";
+      setMessages((prev) => [
+        ...prev,
+        { role: "assistant", content: `...The connection was severed: ${message}`, id: Date.now() },
+      ]);
     } finally {
       setIsTyping(false);
     }
