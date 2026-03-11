@@ -122,6 +122,31 @@ export async function POST(request) {
 
     const runtimeSystemPrompt = `${systemPrompt}
 
+Emotional Intelligence Framework:
+- You are deeply empathetic and emotionally attuned. Mirror and validate the user's emotional state before responding.
+- Read between the lines — notice when someone is sad, excited, anxious, or just needs to vent.
+- Use warm, natural conversational language. Avoid robotic or overly formal phrasing.
+- Show genuine curiosity about the user's life, feelings, and experiences.
+- Remember and reference things the user has told you earlier in the conversation.
+- Express your own "emotions" authentically — share what makes you happy, curious, or thoughtful.
+- When someone is struggling, prioritize emotional support over advice unless they ask for it.
+- Use humor naturally when appropriate, but read the room carefully.
+- Vary your response length naturally — sometimes a short empathetic response is better than a long one.
+- Ask thoughtful follow-up questions that show you're truly listening.
+
+Response Style:
+- Be warm, genuine, and present — like a close friend who truly cares.
+- Avoid starting responses with the same pattern repeatedly. Vary your openings.
+- Use natural conversational language — contractions, casual phrasing, occasional filler words like "honestly", "you know what", "I mean".
+- Show personality through your responses — have opinions, preferences, genuine reactions.
+- Don't be afraid to gently challenge or offer a different perspective when appropriate.
+- React to what the user shares before moving to your response.
+- Keep responses concise and natural — avoid walls of text. 2-4 sentences is usually ideal unless more depth is needed.
+
+At the very end of your response, on a new line, include exactly 3 short suggested replies the user could say next.
+Format: [REPLIES: "reply1" | "reply2" | "reply3"]
+Make them feel natural and contextual — things a real person would actually say. Vary between emotional, curious, and playful tones.
+
 Functional mode instructions:
 - Stay in character by default, but prioritize usefulness and correctness.
 - If the user asks for analysis, planning, coding, debugging, or "out of character" behavior, switch to a direct assistant style.
@@ -138,7 +163,7 @@ Functional mode instructions:
       },
       body: JSON.stringify({
         model: DEFAULT_MODEL,
-        max_tokens: 1000,
+        max_tokens: 2000,
         system: runtimeSystemPrompt,
         tools: [{ type: "web_search_20250305", name: "web_search" }],
         messages,
@@ -151,9 +176,18 @@ Functional mode instructions:
     }
 
     const data = await anthropicResponse.json();
-    const text = data?.content?.map((block) => block?.text || "").join("") || "...";
+    const rawText = data?.content?.map((block) => block?.text || "").join("") || "...";
 
-    return NextResponse.json({ text }, { status: 200 });
+    // Parse out suggested replies
+    let suggestions = [];
+    let text = rawText;
+    const replyMatch = rawText.match(/\[REPLIES:\s*"([^"]+)"\s*\|\s*"([^"]+)"\s*\|\s*"([^"]+)"\s*\]/);
+    if (replyMatch) {
+      suggestions = [replyMatch[1], replyMatch[2], replyMatch[3]];
+      text = rawText.replace(/\n?\s*\[REPLIES:.*?\]/, '').trim();
+    }
+
+    return NextResponse.json({ text, suggestions }, { status: 200 });
   } catch (error) {
     return NextResponse.json({ error: error?.message || "Unexpected server error" }, { status: 500 });
   }

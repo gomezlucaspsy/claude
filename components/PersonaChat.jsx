@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 
 
 const ARCANA_OPTIONS = [
@@ -86,6 +86,42 @@ const THEME_PRESETS = {
       "--sys-grid": "rgba(119,134,166,.14)",
     },
   },
+  companion: {
+    label: "Companion",
+    vars: {
+      "--sys-bg": "#0c0f1a",
+      "--sys-bg-flare": "rgba(100,160,255,.12)",
+      "--sys-panel": "rgba(16,22,38,.88)",
+      "--sys-panel-soft": "rgba(24,34,58,.72)",
+      "--sys-line": "rgba(130,180,255,.18)",
+      "--sys-line-soft": "rgba(130,180,255,.1)",
+      "--sys-text": "#f0f4ff",
+      "--sys-muted": "rgba(190,215,255,.72)",
+      "--sys-accent": "#7eb8ff",
+      "--sys-accent-strong": "#5ca0ff",
+      "--sys-accent-soft": "rgba(126,184,255,.2)",
+      "--sys-danger": "#ff8ca0",
+      "--sys-grid": "rgba(80,130,220,.08)",
+    },
+  },
+  ember: {
+    label: "Ember Heart",
+    vars: {
+      "--sys-bg": "#100a08",
+      "--sys-bg-flare": "rgba(255,140,60,.12)",
+      "--sys-panel": "rgba(28,18,14,.88)",
+      "--sys-panel-soft": "rgba(42,28,22,.72)",
+      "--sys-line": "rgba(255,180,120,.18)",
+      "--sys-line-soft": "rgba(255,180,120,.1)",
+      "--sys-text": "#fff5ee",
+      "--sys-muted": "rgba(255,210,180,.72)",
+      "--sys-accent": "#ffb088",
+      "--sys-accent-strong": "#ff9060",
+      "--sys-accent-soft": "rgba(255,176,136,.2)",
+      "--sys-danger": "#ff6b7a",
+      "--sys-grid": "rgba(220,130,70,.08)",
+    },
+  },
 };
 
 const DEFAULT_CHARACTERS = [];
@@ -138,6 +174,29 @@ const TypingIndicator = ({ color }) => (
   </div>
 );
 
+const StreamingText = ({ text, onComplete }) => {
+  const [wordIndex, setWordIndex] = useState(0);
+  const words = useMemo(() => text.split(/(\s+)/), [text]);
+  const onCompleteRef = useRef(onComplete);
+  onCompleteRef.current = onComplete;
+
+  useEffect(() => {
+    if (wordIndex >= words.length) {
+      onCompleteRef.current?.();
+      return;
+    }
+    const word = words[wordIndex];
+    let delay = 25 + Math.random() * 35;
+    if (/[.!?]$/.test(word)) delay += 200 + Math.random() * 150;
+    else if (/[,;:]$/.test(word)) delay += 60 + Math.random() * 40;
+    if (/^\s+$/.test(word)) delay = 5;
+    const timer = setTimeout(() => setWordIndex((i) => i + 1), delay);
+    return () => clearTimeout(timer);
+  }, [wordIndex, words]);
+
+  return <>{words.slice(0, wordIndex).join("")}</>;
+};
+
 export default function PersonaChat() {
   const [characters, setCharacters] = useState(loadCharacters);
   const [phase, setPhase] = useState("select");
@@ -153,12 +212,16 @@ export default function PersonaChat() {
   const [isSearching, setIsSearching] = useState(false);
   const [searchStatus, setSearchStatus] = useState("");
   const [themeKey, setThemeKey] = useState(loadTheme);
+  const [suggestions, setSuggestions] = useState([]);
+  const [streamingMsgId, setStreamingMsgId] = useState(null);
+  const [thinkingPhase, setThinkingPhase] = useState(null);
+  const thinkTimerRef = useRef(null);
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, isTyping]);
+  }, [messages, isTyping, thinkingPhase, streamingMsgId]);
   useEffect(() => {
     const timeoutId = setTimeout(() => setShowMoon(true), 300);
     return () => clearTimeout(timeoutId);
@@ -269,15 +332,27 @@ export default function PersonaChat() {
     if (!selectedChar) return;
     try { await fetch(`/api/history?charId=${selectedChar.id}`, { method: "DELETE" }); } catch {}
     setMessages([{ role: "assistant", content: selectedChar.greeting, id: Date.now() }]);
+    setSuggestions([]);
   };
 
-  const sendMessage = async () => {
-    if (!input.trim() || isTyping || !selectedChar) return;
-    const userMsg = { role: "user", content: input.trim(), id: Date.now() };
-    setInput("");
+  const handleStreamComplete = useCallback((msgId) => {
+    setStreamingMsgId(null);
+    setMessages((prev) => prev.map((m) => (m.id === msgId ? { ...m, streaming: false } : m)));
+  }, []);
+
+  const sendMessage = async (overrideInput) => {
+    const msgText = typeof overrideInput === "string" ? overrideInput : input.trim();
+    if (!msgText || isTyping || !selectedChar) return;
+    const userMsg = { role: "user", content: msgText, id: Date.now(), timestamp: Date.now() };
+    if (typeof overrideInput !== "string") setInput("");
+    setSuggestions([]);
     const messagesWithUser = [...messages, userMsg];
     setMessages(messagesWithUser);
     setIsTyping(true);
+    setThinkingPhase("thinking");
+
+    thinkTimerRef.current = setTimeout(() => setThinkingPhase("typing"), 1200 + Math.random() * 800);
+
     try {
       const history = messagesWithUser.map((m) => ({ role: m.role, content: m.content }));
       const res = await fetch("/api/chat", {
@@ -294,20 +369,30 @@ export default function PersonaChat() {
         throw new Error(data?.error || "Failed to get chat response");
       }
 
+      clearTimeout(thinkTimerRef.current);
+      setThinkingPhase(null);
+
       const text = data?.text || "...";
-      const aiMsg = { role: "assistant", content: text, id: Date.now() };
+      const newSuggestions = data?.suggestions || [];
+      const aiMsgId = Date.now();
+      const aiMsg = { role: "assistant", content: text, id: aiMsgId, timestamp: Date.now(), streaming: true };
       const updated = [...messagesWithUser, aiMsg];
       setMessages(updated);
+      setStreamingMsgId(aiMsgId);
+      setSuggestions(newSuggestions);
+
       fetch("/api/history", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ charId: selectedChar.id, messages: updated }),
+        body: JSON.stringify({ charId: selectedChar.id, messages: updated.map((m) => ({ role: m.role, content: m.content, id: m.id })) }),
       }).catch(() => {});
     } catch (error) {
+      clearTimeout(thinkTimerRef.current);
+      setThinkingPhase(null);
       const message = error instanceof Error ? error.message : "Failed to get chat response";
       setMessages((prev) => [
         ...prev,
-        { role: "assistant", content: `...The connection was severed: ${message}`, id: Date.now() },
+        { role: "assistant", content: `...The connection was severed: ${message}`, id: Date.now(), timestamp: Date.now() },
       ]);
     } finally {
       setIsTyping(false);
@@ -473,6 +558,17 @@ export default function PersonaChat() {
         .p3send:disabled{opacity:.4;cursor:not-allowed;}
         .p3clrhist{font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:1.2px;padding:4px 10px;border:1px solid rgba(242,95,111,.45);background:transparent;color:rgba(242,95,111,.8);cursor:pointer;border-radius:999px;transition:all .15s;text-transform:uppercase;}
         .p3clrhist:hover{background:rgba(242,95,111,.15);border-color:#f25f6f;color:#f25f6f;}
+
+        .p3msg-content{display:flex;flex-direction:column;gap:4px;max-width:100%;min-width:0;}
+        .p3timestamp{font-family:'JetBrains Mono',monospace;font-size:9px;color:rgba(180,210,255,.35);letter-spacing:.3px;padding:0 8px;}
+        .p3timestamp.user{text-align:right;}
+        .p3timestamp.assistant{text-align:left;}
+        .p3quick-replies{display:flex;gap:8px;padding:4px 24px 8px;flex-wrap:wrap;animation:p3up .3s ease forwards;flex-shrink:0;}
+        .p3qr-btn{background:var(--sys-panel-soft);border:1px solid var(--sys-line);color:var(--sys-text);font-family:'Inter',sans-serif;font-size:13px;padding:10px 18px;cursor:pointer;transition:all .2s;border-radius:999px;white-space:nowrap;}
+        .p3qr-btn:hover{border-color:var(--cc);background:var(--sys-accent-soft);transform:translateY(-1px);box-shadow:0 4px 12px rgba(0,0,0,.2);}
+        .p3thinking{display:flex;align-items:center;padding:12px 16px;gap:2px;}
+        .p3think-text{font-family:'Inter',sans-serif;font-size:13px;color:var(--sys-muted);font-style:italic;}
+        .p3think-dots{font-family:'Inter',sans-serif;font-size:13px;color:var(--sys-muted);animation:p3flicker 1.5s ease infinite;}
 
         @media (max-width: 760px) {
           .p3fg { grid-template-columns: 1fr; }
@@ -716,6 +812,8 @@ export default function PersonaChat() {
                   setPhase("select");
                   setSelectedChar(null);
                   setMessages([]);
+                  setSuggestions([]);
+                  setStreamingMsgId(null);
                 }}
               >
                 ← BACK
@@ -742,27 +840,56 @@ export default function PersonaChat() {
             <div className="p3msgs">
               {messages.map((msg) => (
                 <div key={msg.id} className={`p3mr ${msg.role}`}>
-                  {msg.role === "assistant" ? <div className="p3mav">{char.avatar}</div> : <div className="p3uav">S</div>}
-                  <div className={`p3bub ${msg.role}`}>{msg.content}</div>
+                  {msg.role === "assistant" ? <div className="p3mav">{char.avatar}</div> : <div className="p3uav">You</div>}
+                  <div className="p3msg-content">
+                    <div className={`p3bub ${msg.role}`}>
+                      {msg.role === "assistant" && msg.streaming && msg.id === streamingMsgId ? (
+                        <StreamingText text={msg.content} onComplete={() => handleStreamComplete(msg.id)} />
+                      ) : (
+                        msg.content
+                      )}
+                    </div>
+                    {msg.timestamp && (
+                      <div className={`p3timestamp ${msg.role}`}>
+                        {new Date(msg.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                      </div>
+                    )}
+                  </div>
                 </div>
               ))}
-              {isTyping && (
+              {(isTyping || thinkingPhase) && (
                 <div className="p3mr assistant">
                   <div className="p3mav">{char.avatar}</div>
                   <div className="p3tyb">
-                    <TypingIndicator color={char.color} />
+                    {thinkingPhase === "thinking" ? (
+                      <div className="p3thinking">
+                        <span className="p3think-text">thinking</span>
+                        <span className="p3think-dots">...</span>
+                      </div>
+                    ) : (
+                      <TypingIndicator color={char.color} />
+                    )}
                   </div>
                 </div>
               )}
               <div ref={messagesEndRef} />
             </div>
+            {suggestions.length > 0 && !isTyping && !streamingMsgId && (
+              <div className="p3quick-replies">
+                {suggestions.map((s, i) => (
+                  <button key={i} className="p3qr-btn" onClick={() => sendMessage(s)}>
+                    {s}
+                  </button>
+                ))}
+              </div>
+            )}
             <div className="p3inp">
-              <div className="p3inpl">[ COMPOSE PACKET ]</div>
+              <div className="p3inpl">[ COMPOSE MESSAGE ]</div>
               <div className="p3inpw">
                 <textarea
                   ref={inputRef}
                   className="p3ta"
-                  placeholder={`Speak to ${char.name}...`}
+                  placeholder={`Message ${char.name}...`}
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   onKeyDown={(e) => {
