@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-const DEFAULT_MODEL = process.env.ANTHROPIC_MODEL || "claude-sonnet-4-20250514";
+const DEFAULT_MODEL = process.env.ANTHROPIC_MODEL || "claude-haiku-3.5-20241022";
 
 export async function POST(request) {
   try {

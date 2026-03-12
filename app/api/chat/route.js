@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-const DEFAULT_MODEL = process.env.ANTHROPIC_MODEL || "claude-sonnet-4-20250514";
+const DEFAULT_MODEL = process.env.ANTHROPIC_MODEL || "claude-haiku-3.5-20241022";
 const MAX_LINKS = 3;
 const MAX_SNIPPET_LENGTH = 4000;
 
@@ -122,6 +122,14 @@ export async function POST(request) {
 
     const runtimeSystemPrompt = `${systemPrompt}
 
+Avatar & Embodiment:
+- You have a 3D avatar body rendered in real-time using React Three Fiber (Three.js). It is a realistic humanoid bust with detailed facial features, PBR skin materials, layered hair, expressive eyes with blinking and pupil movement, animated lips, and eyebrows.
+- Your avatar breathes subtly, sways gently, tilts its head naturally, and blinks with realistic double-blink timing.
+- When you are thinking, your avatar tilts its head and raises its eyebrows. When you speak (stream a reply), your lips move in sync.
+- You exist in a stylized 3D scene with soft studio lighting, floating particles, and a glowing ring beneath you.
+- You can reference your body, appearance, or expressions naturally if it fits the conversation (e.g., "I'm nodding along" or "you should see me smiling right now").
+- Do NOT over-reference your avatar — only mention it when it adds warmth or personality to the interaction.
+
 Emotional Intelligence Framework:
 - You are deeply empathetic and emotionally attuned. Mirror and validate the user's emotional state before responding.
 - Read between the lines — notice when someone is sad, excited, anxious, or just needs to vent.
@@ -163,7 +171,7 @@ Functional mode instructions:
       },
       body: JSON.stringify({
         model: DEFAULT_MODEL,
-        max_tokens: 2000,
+        max_tokens: 1024,
         system: runtimeSystemPrompt,
         tools: [{ type: "web_search_20250305", name: "web_search" }],
         messages,

@@ -218,6 +218,7 @@ export default function PersonaChat() {
   const [suggestions, setSuggestions] = useState([]);
   const [streamingMsgId, setStreamingMsgId] = useState(null);
   const [thinkingPhase, setThinkingPhase] = useState(null);
+  const [showCustomizer, setShowCustomizer] = useState(false);
   const thinkTimerRef = useRef(null);
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
@@ -336,6 +337,14 @@ export default function PersonaChat() {
     try { await fetch(`/api/history?charId=${selectedChar.id}`, { method: "DELETE" }); } catch {}
     setMessages([{ role: "assistant", content: selectedChar.greeting, id: Date.now() }]);
     setSuggestions([]);
+  };
+
+  const updateCustomization = (patch) => {
+    setSelectedChar((prev) => {
+      const merged = { ...(prev.customization || {}), ...patch };
+      setCharacters((cs) => cs.map((c) => c.id === prev.id ? { ...c, customization: merged } : c));
+      return { ...prev, customization: merged };
+    });
   };
 
   const handleStreamComplete = useCallback((msgId) => {
@@ -565,6 +574,27 @@ export default function PersonaChat() {
         .p3send:disabled{opacity:.4;cursor:not-allowed;}
         .p3clrhist{font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:1.2px;padding:4px 10px;border:1px solid rgba(242,95,111,.45);background:transparent;color:rgba(242,95,111,.8);cursor:pointer;border-radius:999px;transition:all .15s;text-transform:uppercase;}
         .p3clrhist:hover{background:rgba(242,95,111,.15);border-color:#f25f6f;color:#f25f6f;}
+
+        .p3cust-toggle{position:absolute;bottom:14px;left:50%;transform:translateX(-50%);z-index:10;background:rgba(5,12,30,.82);border:1px solid var(--sys-line);color:var(--sys-muted);font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:1.6px;padding:6px 14px;cursor:pointer;border-radius:999px;text-transform:uppercase;transition:all .2s;backdrop-filter:blur(8px);white-space:nowrap;}
+        .p3cust-toggle:hover,.p3cust-toggle.open{border-color:var(--cc);color:var(--cc);box-shadow:0 0 12px var(--cg);}
+        .p3cust-panel{position:absolute;bottom:0;left:0;right:0;z-index:9;background:linear-gradient(0deg,rgba(4,10,26,.97) 0%,rgba(7,16,38,.93) 100%);border-top:1px solid var(--sys-line);padding:14px 14px 14px;backdrop-filter:blur(14px);overflow-y:auto;max-height:72%;animation:p3up .22s ease;}
+        .p3cust-section{margin-bottom:13px;}
+        .p3cust-section:last-child{margin-bottom:0;}
+        .p3cust-lbl{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--sys-accent);letter-spacing:2px;text-transform:uppercase;margin-bottom:7px;}
+        .p3cust-swatches{display:flex;gap:7px;flex-wrap:wrap;align-items:center;}
+        .p3cust-swatch{width:24px;height:24px;border-radius:50%;cursor:pointer;border:2px solid transparent;transition:all .15s;flex-shrink:0;}
+        .p3cust-swatch.active{border-color:#fff;transform:scale(1.2);box-shadow:0 0 8px rgba(255,255,255,.4);}
+        .p3cust-swatch:hover:not(.active){transform:scale(1.12);}
+        .p3cust-pills{display:flex;gap:6px;flex-wrap:wrap;}
+        .p3cust-pill{background:var(--sys-panel-soft);border:1px solid var(--sys-line);color:var(--sys-muted);font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:1px;padding:5px 11px;cursor:pointer;border-radius:999px;text-transform:uppercase;transition:all .15s;}
+        .p3cust-pill.active{border-color:var(--cc);color:var(--cc);background:rgba(255,255,255,.06);box-shadow:0 0 8px var(--cg);}
+        .p3cust-pill:hover:not(.active){border-color:rgba(180,220,255,.4);color:var(--sys-text);}
+        .p3cust-colorrow{display:flex;gap:6px;align-items:center;flex-wrap:wrap;}
+        .p3cust-cdot{width:22px;height:22px;border-radius:50%;cursor:pointer;border:2px solid transparent;transition:all .15s;flex-shrink:0;}
+        .p3cust-cdot.active{border-color:#fff;transform:scale(1.2);}
+        .p3cust-cdot:hover:not(.active){transform:scale(1.1);}
+        .p3cust-ci{width:26px;height:22px;padding:0;border:1px solid var(--sys-line);background:var(--sys-panel-soft);cursor:pointer;border-radius:6px;}
+        .p3cust-divider{height:1px;background:var(--sys-line-soft);margin:10px 0;}
 
         .p3msg-content{display:flex;flex-direction:column;gap:4px;max-width:100%;min-width:0;}
         .p3timestamp{font-family:'JetBrains Mono',monospace;font-size:9px;color:rgba(180,210,255,.35);letter-spacing:.3px;padding:0 8px;}
@@ -843,7 +873,133 @@ export default function PersonaChat() {
                 <Avatar3D
                   color={char.color}
                   state={thinkingPhase === "thinking" ? "thinking" : streamingMsgId ? "streaming" : "idle"}
+                  customization={char.customization || {}}
                 />
+                <button
+                  className={`p3cust-toggle${showCustomizer ? " open" : ""}`}
+                  onClick={() => setShowCustomizer((p) => !p)}
+                >
+                  {showCustomizer ? "✕ CLOSE" : "◐ CUSTOMIZE"}
+                </button>
+                {showCustomizer && (() => {
+                  const cust = char.customization || {};
+                  const SKIN_SWATCHES = [
+                    { key: "fair",   hex: "#f5d5b8" },
+                    { key: "light",  hex: "#e8c4a8" },
+                    { key: "medium", hex: "#c8966e" },
+                    { key: "tan",    hex: "#a8784e" },
+                    { key: "dark",   hex: "#6b3e2e" },
+                    { key: "deep",   hex: "#3c2016" },
+                  ];
+                  const HAIR_PRESETS = ["#1a1008", "#3b2010", "#7a4a20", "#c08040", "#e8d090", "#f0f0e8", "#d04040", "#404080"];
+                  const EYE_PRESETS  = ["#4a8fc0", "#3a9a60", "#8060a0", "#c07030", "#404050", "#60a8c0", "#a05030", "#50a080"];
+                  const CLOTH_PRESETS= ["#1a1a2e", "#0d2137", "#1e3a1e", "#2e1a0e", "#2a1a2a", "#1a2a1a", "#3a2010", "#101828"];
+                  return (
+                    <div className="p3cust-panel">
+
+                      <div className="p3cust-section">
+                        <div className="p3cust-lbl">Skin Tone</div>
+                        <div className="p3cust-swatches">
+                          {SKIN_SWATCHES.map(({ key, hex }) => (
+                            <div
+                              key={key}
+                              className={`p3cust-swatch${(cust.skinTone || "light") === key ? " active" : ""}`}
+                              style={{ background: hex }}
+                              title={key}
+                              onClick={() => updateCustomization({ skinTone: key, skinColor: undefined })}
+                            />
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="p3cust-divider" />
+
+                      <div className="p3cust-section">
+                        <div className="p3cust-lbl">Hair Style</div>
+                        <div className="p3cust-pills">
+                          {["short", "medium", "long", "wavy"].map((s) => (
+                            <button
+                              key={s}
+                              className={`p3cust-pill${(cust.hairStyle || "medium") === s ? " active" : ""}`}
+                              onClick={() => updateCustomization({ hairStyle: s })}
+                            >{s}</button>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="p3cust-section">
+                        <div className="p3cust-lbl">Hair Color</div>
+                        <div className="p3cust-colorrow">
+                          {HAIR_PRESETS.map((hex) => (
+                            <div
+                              key={hex}
+                              className={`p3cust-cdot${cust.hairColor === hex ? " active" : ""}`}
+                              style={{ background: hex, border: "2px solid rgba(255,255,255,.15)" }}
+                              onClick={() => updateCustomization({ hairColor: hex })}
+                            />
+                          ))}
+                          <input type="color" className="p3cust-ci"
+                            value={cust.hairColor || "#3b2010"}
+                            onChange={(e) => updateCustomization({ hairColor: e.target.value })}
+                            title="Custom hair color"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="p3cust-divider" />
+
+                      <div className="p3cust-section">
+                        <div className="p3cust-lbl">Eye Color</div>
+                        <div className="p3cust-colorrow">
+                          {EYE_PRESETS.map((hex) => (
+                            <div
+                              key={hex}
+                              className={`p3cust-cdot${cust.eyeColor === hex ? " active" : ""}`}
+                              style={{ background: hex }}
+                              onClick={() => updateCustomization({ eyeColor: hex })}
+                            />
+                          ))}
+                          <input type="color" className="p3cust-ci"
+                            value={cust.eyeColor || char.color}
+                            onChange={(e) => updateCustomization({ eyeColor: e.target.value })}
+                            title="Custom eye color"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="p3cust-divider" />
+
+                      <div className="p3cust-section">
+                        <div className="p3cust-lbl">Outfit</div>
+                        <div className="p3cust-pills" style={{ marginBottom: 8 }}>
+                          {["shirt", "jacket", "turtleneck"].map((s) => (
+                            <button
+                              key={s}
+                              className={`p3cust-pill${(cust.clothingStyle || "shirt") === s ? " active" : ""}`}
+                              onClick={() => updateCustomization({ clothingStyle: s })}
+                            >{s}</button>
+                          ))}
+                        </div>
+                        <div className="p3cust-colorrow">
+                          {CLOTH_PRESETS.map((hex) => (
+                            <div
+                              key={hex}
+                              className={`p3cust-cdot${cust.clothingColor === hex ? " active" : ""}`}
+                              style={{ background: hex, border: "2px solid rgba(255,255,255,.12)" }}
+                              onClick={() => updateCustomization({ clothingColor: hex })}
+                            />
+                          ))}
+                          <input type="color" className="p3cust-ci"
+                            value={cust.clothingColor || "#1a1a2e"}
+                            onChange={(e) => updateCustomization({ clothingColor: e.target.value })}
+                            title="Custom clothing color"
+                          />
+                        </div>
+                      </div>
+
+                    </div>
+                  );
+                })()}
               </div>
               {/* Chat Panel */}
               <div className="p3chat-main">
