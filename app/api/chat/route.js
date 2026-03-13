@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-const DEFAULT_MODEL = process.env.ANTHROPIC_MODEL || "claude-haiku-4-20250514";
+const DEFAULT_MODEL = process.env.ANTHROPIC_MODEL || "claude-haiku-4-5";
 const MAX_LINKS = 3;
 const MAX_SNIPPET_LENGTH = 4000;
 
