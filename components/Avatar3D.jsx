@@ -733,43 +733,38 @@ export default function Avatar3D({ color = "#4a8fc0", state = "idle", customizat
           antialias: true,
           alpha: true,
           powerPreference: "high-performance",
-          toneMapping: THREE.ACESFilmicToneMapping,
-          toneMappingExposure: 1.1,
         }}
         style={{ background: "transparent" }}
         onCreated={({ gl }) => {
           gl.setClearColor(0x000000, 0);
           gl.outputColorSpace = THREE.SRGBColorSpace;
+          gl.toneMapping = THREE.ACESFilmicToneMapping;
+          gl.toneMappingExposure = 1.1;
         }}
-        fallback={<div style={{ color: "white", padding: 20 }}>Loading 3D...</div>}
         onError={() => setHasError(true)}
       >
-        <Suspense fallback={null}>
-          {/* Studio-quality lighting */}
-          <ambientLight intensity={0.35} />
-          {/* Key light - warm, from upper right */}
-          <directionalLight position={[2.5, 3, 4]} intensity={1.2} color="#fff5e8" />
-          {/* Fill light - cool, from left */}
-          <directionalLight position={[-3, 2, 2]} intensity={0.5} color="#c8d8f8" />
-          {/* Rim / back light - for edge definition */}
-          <directionalLight position={[0, 2, -4]} intensity={0.8} color="#a0b8e0" />
-          {/* Under light - subtle, softens jaw shadows */}
-          <pointLight position={[0, -1, 2]} intensity={0.2} color="#e8d0c8" />
-          {/* Accent colored light */}
-          <pointLight position={[1, 0.5, 1.5]} intensity={0.3} color={color} />
-          {/* Hemisphere for overall fill */}
-          <hemisphereLight args={["#c8d8f0", "#18243a", 0.35]} />
-          {/* Environment for reflections */}
-          <Environment preset="studio" environmentIntensity={0.3} />
+        {/* Lights always render — no Suspense needed */}
+        <ambientLight intensity={0.35} />
+        <directionalLight position={[2.5, 3, 4]} intensity={1.2} color="#fff5e8" />
+        <directionalLight position={[-3, 2, 2]} intensity={0.5} color="#c8d8f8" />
+        <directionalLight position={[0, 2, -4]} intensity={0.8} color="#a0b8e0" />
+        <pointLight position={[0, -1, 2]} intensity={0.2} color="#e8d0c8" />
+        <pointLight position={[1, 0.5, 1.5]} intensity={0.3} color={color} />
+        <hemisphereLight args={["#c8d8f0", "#18243a", 0.35]} />
 
+        {/* Avatar mesh — own Suspense so it renders independently of Environment */}
+        <Suspense fallback={null}>
           <Float speed={1.2} rotationIntensity={0.05} floatIntensity={0.15} floatingRange={[-0.02, 0.02]}>
             <RealisticBody color={color} state={state} customization={customization} />
           </Float>
-
           <Particles color={color} count={18} />
           <GlowRing color={color} />
-
           <ContactShadows position={[0, -1.3, 0]} opacity={0.3} scale={2.5} blur={3} far={2} color="#000020" />
+        </Suspense>
+
+        {/* Environment in its own Suspense — won't block avatar render if HDR is slow/unavailable */}
+        <Suspense fallback={null}>
+          <Environment preset="studio" environmentIntensity={0.3} />
         </Suspense>
       </Canvas>
 

@@ -647,6 +647,8 @@ export default function PersonaChat() {
         .p3cust-ci{width:26px;height:22px;padding:0;border:1px solid var(--sys-line);background:var(--sys-panel-soft);cursor:pointer;border-radius:6px;}
         .p3cust-divider{height:1px;background:var(--sys-line-soft);margin:10px 0;}
 
+
+
         .p3msg-content{display:flex;flex-direction:column;gap:4px;max-width:100%;min-width:0;}
         .p3timestamp{font-family:'JetBrains Mono',monospace;font-size:9px;color:rgba(180,210,255,.35);letter-spacing:.3px;padding:0 8px;}
         .p3timestamp.user{text-align:right;}
@@ -879,6 +881,8 @@ export default function PersonaChat() {
                     onChange={(e) => setForm((p) => ({ ...p, greeting: e.target.value }))}
                   />
                 </div>
+
+
               </div>
             </div>
             <div className="p3crf">
@@ -1047,6 +1051,7 @@ export default function PersonaChat() {
                           />
                         </div>
                       </div>
+
 
                     </div>
                   );
