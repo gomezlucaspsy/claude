@@ -152,15 +152,25 @@ IF you need to show code/files:
 - INSTEAD: Save to MyComputer using FILE_ACTION at end
 - Then in chat say: "Saved to MyComputer as filename.ext"
 
+=== REPLY SUGGESTIONS ===
+At the END of every message, ALWAYS suggest 3 follow-up questions/actions in this format:
+[REPLIES: "suggestion 1" | "suggestion 2" | "suggestion 3"]
+
+Make suggestions relevant, actionable, and diverse. Examples:
+- Ask clarifying questions
+- Suggest next steps
+- Offer alternatives
+- Request elaboration
+
 FORMAT (end of message):
 Your chat reply here...
-[FILE_ACTION:create|/|filename|file|code_content]
 [REPLIES: "opt1" | "opt2" | "opt3"]
+[FILE_ACTION:create|/|filename|file|code_content]
 
 EXAMPLE:
 I created the webcam component. Saved to MyComputer.
-[FILE_ACTION:create|/|webcam.html|file|<html>...</html>]
-[REPLIES: "View it" | "Next step" | "Done"]`;
+[REPLIES: "Add filters" | "Make it responsive" | "Show me code"]
+[FILE_ACTION:create|/|webcam.html|file|<html>...</html>]`;
 
     const anthropicResponse = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
