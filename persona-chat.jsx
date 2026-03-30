@@ -53,19 +53,19 @@ export default function PersonaChat() {
         content: m.content,
       }));
 
-      const response = await fetch("https://api.anthropic.com/v1/messages", {
+      const response = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          model: "claude-sonnet-4-20250514",
-          max_tokens: 1000,
-          system: selectedChar.systemPrompt,
+          systemPrompt: selectedChar.systemPrompt,
           messages: history,
         }),
       });
 
       const data = await response.json();
-      const text = data.content?.map((b) => b.text || "").join("") || "...";
+      if (!response.ok) throw new Error(data.error || "Failed to fetch response");
+      
+      const text = data.text || "...";
       setMessages((prev) => [...prev, { role: "assistant", content: text, id: Date.now() }]);
     } catch (e) {
       setMessages((prev) => [...prev, {

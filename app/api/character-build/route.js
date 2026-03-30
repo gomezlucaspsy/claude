@@ -1,4 +1,14 @@
 import { NextResponse } from "next/server";
+import { readFileSync } from "fs";
+
+// Force-read .env.local to avoid stale system env override
+try {
+  const envLocal = readFileSync(process.cwd() + "/.env.local", "utf8");
+  for (const line of envLocal.split("\n")) {
+    const m = line.match(/^([^#=]+)=(.+)$/);
+    if (m) process.env[m[1].trim()] = m[2].trim();
+  }
+} catch {}
 
 const DEFAULT_MODEL = process.env.ANTHROPIC_MODEL || "claude-haiku-4-5";
 
