@@ -1,14 +1,22 @@
 import { NextResponse } from "next/server";
+import {
+  getOrCreateFileSystem,
+  createFileOrFolder,
+  readFile,
+  updateFile,
+  deleteFileOrFolder,
+  getFileTree,
+} from "../store.js";
 
 /**
  * POST /api/persona-files/ai-action
- * Allows AI to perform file operations programmatically
- * Used when the persona wants to create/modify files during conversation
+ * Allows AI to perform file operations programmatically during conversation.
+ * Supports: create, read, update, delete, list
  */
 
 export async function POST(request) {
   try {
-    const { personaId, aiAction, details } = await request.json();
+    const { personaId, aiAction, details, meta } = await request.json();
 
     if (!personaId || !aiAction) {
       return NextResponse.json(
@@ -17,36 +25,40 @@ export async function POST(request) {
       );
     }
 
-    // Delegate to main file route
-    const fileResponse = await fetch(
-      new URL("/api/persona-files", request.url),
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: aiAction.action,
-          personaId,
-          path: aiAction.path,
-          name: aiAction.name,
-          type: aiAction.type,
-          content: aiAction.content,
-        }),
-      }
-    );
+    const fs = getOrCreateFileSystem(personaId, meta || {});
+    let result;
 
-    const fileResult = await fileResponse.json();
-
-    if (!fileResponse.ok) {
-      return NextResponse.json(fileResult, { status: fileResponse.status });
+    switch (aiAction.action) {
+      case "create":
+        result = createFileOrFolder(fs.root, aiAction.path || "/", aiAction.name, aiAction.type || "file", aiAction.content || "");
+        break;
+      case "read":
+        result = readFile(fs.root, aiAction.path);
+        break;
+      case "update":
+        result = updateFile(fs.root, aiAction.path, aiAction.content || "");
+        break;
+      case "delete":
+        result = deleteFileOrFolder(fs.root, aiAction.path);
+        break;
+      case "list":
+        const tree = getFileTree(fs.root);
+        result = { success: true, tree: tree.join("\n") };
+        break;
+      default:
+        return NextResponse.json({ error: `Unknown action: ${aiAction.action}` }, { status: 400 });
     }
 
-    // Log the AI action
+    if (result.error) {
+      return NextResponse.json({ error: result.error }, { status: 400 });
+    }
+
     return NextResponse.json({
       success: true,
       action: aiAction.action,
       path: aiAction.path,
       message: generateAIActionMessage(aiAction, details),
-      result: fileResult,
+      result,
     });
   } catch (error) {
     return NextResponse.json(

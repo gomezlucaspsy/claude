@@ -272,6 +272,7 @@ export default function PersonaChat() {
   const [thinkingPhase, setThinkingPhase] = useState(null);
   const [showCustomizer, setShowCustomizer] = useState(false);
   const [showFileExplorer, setShowFileExplorer] = useState(false);
+  const [fileRefreshKey, setFileRefreshKey] = useState(0);
   const [isClient, setIsClient] = useState(false);
   const thinkTimerRef = useRef(null);
   const messagesEndRef = useRef(null);
@@ -454,6 +455,13 @@ export default function PersonaChat() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           systemPrompt: selectedChar.systemPrompt,
+          personaId: selectedChar.id,
+          charMeta: {
+            name: selectedChar.name,
+            title: selectedChar.title,
+            archetype: selectedChar.archetype,
+            systemPrompt: selectedChar.systemPrompt,
+          },
           messages: history,
         }),
       });
@@ -468,12 +476,18 @@ export default function PersonaChat() {
 
       const text = data?.text || "...";
       const newSuggestions = data?.suggestions || [];
+      const fileActionsExecuted = data?.fileActions || [];
       const aiMsgId = Date.now();
       const aiMsg = { role: "assistant", content: text, id: aiMsgId, timestamp: Date.now(), streaming: true };
       const updated = [...messagesWithUser, aiMsg];
       setMessages(updated);
       setStreamingMsgId(aiMsgId);
       setSuggestions(newSuggestions);
+
+      // Refresh file explorer if AI performed file actions
+      if (fileActionsExecuted.length > 0) {
+        setFileRefreshKey((k) => k + 1);
+      }
 
       fetch("/api/history", {
         method: "POST",
@@ -1176,7 +1190,7 @@ export default function PersonaChat() {
 
               {/* FileExplorer Panel */}
               <div className={`p3file-panel${showFileExplorer ? " open" : ""}`}>
-                <FileExplorer personaId={char.id} />
+                <FileExplorer personaId={char.id} refreshKey={fileRefreshKey} charMeta={{ name: char.name, title: char.title, archetype: char.archetype, systemPrompt: char.systemPrompt }} />
               </div>
 
               {/* FileExplorer Toggle Button */}
