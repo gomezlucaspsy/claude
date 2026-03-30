@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import dynamic from "next/dynamic";
 
 const Avatar3D = dynamic(() => import("./Avatar3D"), { ssr: false });
+const FileExplorer = dynamic(() => import("./FileExplorer"), { ssr: false });
 
 
 const ARCANA_OPTIONS = [
@@ -252,7 +253,7 @@ const StreamingText = ({ text, onComplete }) => {
 };
 
 export default function PersonaChat() {
-  const [characters, setCharacters] = useState(loadCharacters);
+  const [characters, setCharacters] = useState(DEFAULT_CHARACTERS);
   const [phase, setPhase] = useState("select");
   const [selectedChar, setSelectedChar] = useState(null);
   const [messages, setMessages] = useState([]);
@@ -265,14 +266,40 @@ export default function PersonaChat() {
   const [searchQuery, setSearchQuery] = useState("");
   const [isSearching, setIsSearching] = useState(false);
   const [searchStatus, setSearchStatus] = useState("");
-  const [themeKey, setThemeKey] = useState(loadTheme);
+  const [themeKey, setThemeKey] = useState("aurora");
   const [suggestions, setSuggestions] = useState([]);
   const [streamingMsgId, setStreamingMsgId] = useState(null);
   const [thinkingPhase, setThinkingPhase] = useState(null);
   const [showCustomizer, setShowCustomizer] = useState(false);
+  const [showFileExplorer, setShowFileExplorer] = useState(false);
+  const [isClient, setIsClient] = useState(false);
   const thinkTimerRef = useRef(null);
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
+
+  // Load from localStorage only on client
+  useEffect(() => {
+    setIsClient(true);
+    try {
+      const stored = localStorage.getItem("persona_characters_v2");
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed)) {
+          const userChars = parsed.filter((c) => !c?.isDefault);
+          const defaultIds = new Set(DEFAULT_CHARACTERS.map((c) => c.id));
+          const nonDuplicateUser = userChars.filter((c) => !defaultIds.has(c.id));
+          setCharacters([...DEFAULT_CHARACTERS, ...nonDuplicateUser]);
+        }
+      }
+    } catch {}
+
+    try {
+      const storedTheme = localStorage.getItem("persona_theme_v1");
+      if (storedTheme && THEME_PRESETS[storedTheme]) {
+        setThemeKey(storedTheme);
+      }
+    } catch {}
+  }, []);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -282,11 +309,15 @@ export default function PersonaChat() {
     return () => clearTimeout(timeoutId);
   }, []);
   useEffect(() => {
-    saveCharacters(characters);
-  }, [characters]);
+    if (isClient) {
+      saveCharacters(characters);
+    }
+  }, [characters, isClient]);
   useEffect(() => {
-    saveTheme(themeKey);
-  }, [themeKey]);
+    if (isClient) {
+      saveTheme(themeKey);
+    }
+  }, [themeKey, isClient]);
 
 
   const openCreate = () => {
@@ -646,6 +677,12 @@ export default function PersonaChat() {
         .p3cust-cdot:hover:not(.active){transform:scale(1.1);}
         .p3cust-ci{width:26px;height:22px;padding:0;border:1px solid var(--sys-line);background:var(--sys-panel-soft);cursor:pointer;border-radius:6px;}
         .p3cust-divider{height:1px;background:var(--sys-line-soft);margin:10px 0;}
+
+        /* FileExplorer Panel */
+        .p3file-panel{width:0;transition:width .3s ease;overflow:hidden;border-left:1px solid var(--sys-line);}
+        .p3file-panel.open{width:360px;}
+        .p3file-toggle{position:absolute;bottom:50px;right:14px;background:rgba(5,12,30,.82);border:1px solid var(--sys-line);color:var(--sys-muted);font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:1.6px;padding:6px 14px;cursor:pointer;border-radius:999px;text-transform:uppercase;transition:all .2s;backdrop-filter:blur(8px);white-space:nowrap;z-index:10;}
+        .p3file-toggle:hover,.p3file-toggle.active{border-color:var(--cc);color:var(--cc);box-shadow:0 0 12px var(--cg);}
 
 
 
@@ -1136,6 +1173,20 @@ export default function PersonaChat() {
                   </div>
                 </div>
               </div>
+
+              {/* FileExplorer Panel */}
+              <div className={`p3file-panel${showFileExplorer ? " open" : ""}`}>
+                <FileExplorer personaId={char.id} />
+              </div>
+
+              {/* FileExplorer Toggle Button */}
+              <button
+                className={`p3file-toggle${showFileExplorer ? " active" : ""}`}
+                onClick={() => setShowFileExplorer(!showFileExplorer)}
+                title="Toggle My Computer"
+              >
+                {showFileExplorer ? "✕ CLOSE" : "📁 FILES"}
+              </button>
             </div>
           </div>
         )}
