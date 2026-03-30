@@ -274,9 +274,14 @@ export default function PersonaChat() {
   const [showFileExplorer, setShowFileExplorer] = useState(false);
   const [fileRefreshKey, setFileRefreshKey] = useState(0);
   const [isClient, setIsClient] = useState(false);
+  const [chatPosition, setChatPosition] = useState({ x: 0, y: 0 });
+  const [isDraggingChat, setIsDraggingChat] = useState(false);
+  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
   const thinkTimerRef = useRef(null);
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
+  const chatHeaderRef = useRef(null);
+  const avatarHeaderRef = useRef(null);
 
   // Load from localStorage only on client
   useEffect(() => {
@@ -320,6 +325,57 @@ export default function PersonaChat() {
     }
   }, [themeKey, isClient]);
 
+  // Chat drag functionality
+  useEffect(() => {
+    if (!isDraggingChat) return;
+
+    const handleMouseMove = (e) => {
+      const newX = e.clientX - dragOffset.x;
+      const newY = e.clientY - dragOffset.y;
+      setChatPosition({ x: newX, y: newY });
+    };
+
+    const handleMouseUp = () => {
+      setIsDraggingChat(false);
+    };
+
+    window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("mouseup", handleMouseUp);
+    return () => {
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", handleMouseUp);
+    };
+  }, [isDraggingChat, dragOffset]);
+
+  const handleChatHeaderMouseDown = (e) => {
+    if (e.button !== 0) return; // only left click
+    e.preventDefault();
+    e.stopPropagation();
+    
+    const rect = chatHeaderRef.current?.getBoundingClientRect();
+    if (rect) {
+      const offsetX = e.clientX - rect.left;
+      const offsetY = e.clientY - rect.top;
+      
+      setDragOffset({
+        x: e.clientX - chatPosition.x,
+        y: e.clientY - chatPosition.y,
+      });
+      setIsDraggingChat(true);
+    }
+  };
+
+  const handleAvatarHeaderMouseDown = (e) => {
+    if (e.button !== 0) return; // only left click
+    e.preventDefault();
+    e.stopPropagation();
+    
+    setDragOffset({
+      x: e.clientX - chatPosition.x,
+      y: e.clientY - chatPosition.y,
+    });
+    setIsDraggingChat(true);
+  };
 
   const openCreate = () => {
     setForm({ name: "", title: "", arcana: "IX", archetype: "THE HERMIT", color: "#4a8fc0", avatar: "👁️", description: "", systemPrompt: "", greeting: "" });
@@ -449,7 +505,9 @@ export default function PersonaChat() {
     thinkTimerRef.current = setTimeout(() => setThinkingPhase("typing"), 1200 + Math.random() * 800);
 
     try {
-      const history = messagesWithUser.map((m) => ({ role: m.role, content: m.content }));
+      const history = messagesWithUser
+        .slice(-10) // Only send last 10 messages to save tokens
+        .map((m) => ({ role: m.role, content: m.content }));
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -460,7 +518,6 @@ export default function PersonaChat() {
             name: selectedChar.name,
             title: selectedChar.title,
             archetype: selectedChar.archetype,
-            systemPrompt: selectedChar.systemPrompt,
           },
           messages: history,
         }),
@@ -628,12 +685,24 @@ export default function PersonaChat() {
         .p3mcb{flex:1;background:rgba(16,31,63,.72);border:1px solid rgba(132,194,255,.24);color:rgba(194,228,255,.86);font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:1.2px;padding:10px;cursor:pointer;transition:all .2s;border-radius:999px;}
         .p3mcb:hover{border-color:rgba(156,214,255,.45);}
 
-        .p3chat{display:flex;flex-direction:column;height:100vh;position:relative;z-index:10;animation:p3up .5s ease forwards;}
+        .p3chat{display:flex;flex-direction:column;height:100vh;position:fixed;z-index:10;animation:p3up .5s ease forwards;will-change:transform;pointer-events:auto;}
+        .p3chat.dragging{user-select:none;}
+        .p3ch{padding:0 24px;height:76px;display:flex;align-items:center;gap:16px;background:var(--sys-panel);border-bottom:1px solid var(--sys-line);position:relative;backdrop-filter:blur(14px);flex-shrink:0;border-radius:0 0 24px 24px;cursor:grab;user-select:none;touch-action:none;}
+        .p3ch::after{content:'';position:absolute;bottom:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,var(--cc),transparent);opacity:.6;}
+        .p3back{background:var(--sys-panel-soft);border:1px solid var(--sys-line);color:var(--sys-muted);font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:1.2px;padding:8px 14px;cursor:pointer;transition:all .2s;border-radius:999px;text-transform:uppercase;}
+        .p3back:hover{border-color:#8bd8ff;color:#dff5ff;background:rgba(16,37,73,.9);}
+        .p3chav{font-size:36px;filter:drop-shadow(0 0 6px rgba(125,187,255,.25));}
+        .p3chin{display:flex;flex-direction:column;justify-content:center;gap:2px;flex:1;}
+        .p3chnm{font-family:'Orbitron',sans-serif;font-size:16px;color:var(--sys-text);letter-spacing:.4px;font-weight:700;line-height:1;}
+        .p3chtt{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--sys-muted);letter-spacing:.6px;text-transform:uppercase;line-height:1;}
+        .p3chac{font-family:'Cinzel',serif;font-size:9px;letter-spacing:2px;color:var(--cc);text-transform:uppercase;line-height:1.3;}
         .p3chat-body{display:flex;flex:1;overflow:hidden;}
-        .p3avatar-panel{width:340px;flex-shrink:0;background:var(--sys-panel);border-right:1px solid var(--sys-line);position:relative;overflow:hidden;}
+        .p3avatar-panel{width:480px;flex-shrink:0;background:var(--sys-panel);border-right:1px solid var(--sys-line);position:relative;overflow:hidden;display:flex;flex-direction:column;}
         .p3avatar-panel::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse at 50% 40%,var(--sys-bg-flare),transparent 70%);pointer-events:none;z-index:1;}
+        .p3avatar-header{height:60px;display:flex;align-items:center;justify-content:center;padding:0 12px;background:linear-gradient(180deg,rgba(255,255,255,0.04),rgba(255,255,255,0.01));border-bottom:1px solid var(--sys-line);cursor:grab;user-select:none;touch-action:none;font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--sys-muted);letter-spacing:1.2px;text-transform:uppercase;text-align:center;flex-shrink:0;z-index:2;}
+        .p3avatar-header:active{cursor:grabbing;}
+        .p3avatar-content{flex:1;position:relative;overflow:hidden;z-index:1;display:flex;flex-direction:column;}
         .p3chat-main{flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0;}
-        .p3ch{padding:0 24px;height:76px;display:flex;align-items:center;gap:16px;background:var(--sys-panel);border-bottom:1px solid var(--sys-line);position:relative;backdrop-filter:blur(14px);flex-shrink:0;border-radius:0 0 24px 24px;}
         .p3ch::after{content:'';position:absolute;bottom:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,var(--cc),transparent);opacity:.6;}
         .p3back{background:var(--sys-panel-soft);border:1px solid var(--sys-line);color:var(--sys-muted);font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:1.2px;padding:8px 14px;cursor:pointer;transition:all .2s;border-radius:999px;text-transform:uppercase;}
         .p3back:hover{border-color:#8bd8ff;color:#dff5ff;background:rgba(16,37,73,.9);}
@@ -649,7 +718,7 @@ export default function PersonaChat() {
         .p3msgs{flex:1;overflow-y:auto;padding:24px 24px 16px;display:flex;flex-direction:column;gap:16px;scrollbar-width:thin;scrollbar-color:rgba(111,173,255,.35) transparent;}
         .p3msgs::-webkit-scrollbar{width:6px;}
         .p3msgs::-webkit-scrollbar-thumb{background:rgba(111,173,255,.35);border-radius:12px;}
-        .p3mr{display:flex;gap:12px;animation:p3in .24s ease forwards;max-width:740px;}
+        .p3mr{display:flex;gap:12px;animation:p3in .24s ease forwards;max-width:90%;}
         .p3mr.user{align-self:flex-end;flex-direction:row-reverse;}
         .p3mr.assistant{align-self:flex-start;}
         .p3mav{width:40px;height:40px;border-radius:18px;display:flex;align-items:center;justify-content:center;font-size:19px;flex-shrink:0;border:1px solid var(--cc);filter:drop-shadow(0 0 8px var(--cg));background:rgba(9,19,38,.85);}
@@ -692,10 +761,17 @@ export default function PersonaChat() {
         .p3cust-ci{width:26px;height:22px;padding:0;border:1px solid var(--sys-line);background:var(--sys-panel-soft);cursor:pointer;border-radius:6px;}
         .p3cust-divider{height:1px;background:var(--sys-line-soft);margin:10px 0;}
 
-        /* FileExplorer Panel */
-        .p3file-panel{width:0;transition:width .3s ease;overflow:hidden;border-left:1px solid var(--sys-line);}
-        .p3file-panel.open{width:360px;}
-        .p3file-toggle{position:absolute;bottom:50px;right:14px;background:rgba(5,12,30,.82);border:1px solid var(--sys-line);color:var(--sys-muted);font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:1.6px;padding:6px 14px;cursor:pointer;border-radius:999px;text-transform:uppercase;transition:all .2s;backdrop-filter:blur(8px);white-space:nowrap;z-index:10;}
+        /* FileExplorer Modal */
+        .p3file-modal{position:fixed;inset:0;background:rgba(2,6,14,.74);z-index:200;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(6px);animation:p3up .3s ease forwards;}
+        .p3file-modal-content{background:linear-gradient(170deg,rgba(14,29,61,.96),rgba(10,21,42,.97));border:1px solid var(--sys-line);padding:0;border-radius:24px;max-width:580px;width:90%;max-height:80vh;box-shadow:0 22px 40px rgba(0,0,0,.45);display:flex;flex-direction:column;overflow:hidden;}
+        .p3file-modal-header{padding:20px 24px;background:linear-gradient(180deg,rgba(255,255,255,0.04),rgba(255,255,255,0.01));border-bottom:1px solid var(--sys-line);flex-shrink:0;display:flex;align-items:center;justify-content:space-between;}
+        .p3file-modal-title{font-family:'Orbitron',sans-serif;font-size:14px;color:var(--sys-text);letter-spacing:1.2px;text-transform:uppercase;}
+        .p3file-modal-close{background:none;border:none;color:var(--sys-muted);cursor:pointer;font-size:18px;padding:4px 8px;transition:color .2s;}
+        .p3file-modal-close:hover{color:var(--sys-text);}
+        .p3file-modal-body{flex:1;overflow-y:auto;padding:20px;scrollbar-width:thin;scrollbar-color:rgba(111,173,255,.35) transparent;}
+        .p3file-modal-body::-webkit-scrollbar{width:6px;}
+        .p3file-modal-body::-webkit-scrollbar-thumb{background:rgba(111,173,255,.35);border-radius:12px;}
+        .p3file-toggle{position:fixed;bottom:24px;right:24px;background:rgba(5,12,30,.82);border:1px solid var(--sys-line);color:var(--sys-muted);font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:1.6px;padding:8px 16px;cursor:pointer;border-radius:999px;text-transform:uppercase;transition:all .2s;backdrop-filter:blur(8px);white-space:nowrap;z-index:50;}
         .p3file-toggle:hover,.p3file-toggle.active{border-color:var(--cc);color:var(--cc);box-shadow:0 0 12px var(--cg);}
 
 
@@ -948,8 +1024,19 @@ export default function PersonaChat() {
         )}
 
         {phase === "chat" && char && (
-          <div className="p3chat">
-            <div className="p3ch">
+          <div 
+            className={`p3chat${isDraggingChat ? " dragging" : ""}`}
+            style={{
+              transform: `translate(${chatPosition.x}px, ${chatPosition.y}px)`,
+              cursor: isDraggingChat ? 'grabbing' : 'default',
+            }}
+          >
+            <div 
+              className="p3ch"
+              ref={chatHeaderRef}
+              onMouseDown={handleChatHeaderMouseDown}
+              style={{ cursor: isDraggingChat ? 'grabbing' : 'grab' }}
+            >
               <button
                 className="p3back"
                 onClick={() => {
@@ -976,32 +1063,41 @@ export default function PersonaChat() {
             <div className="p3chat-body">
               {/* 3D Avatar Panel */}
               <div className="p3avatar-panel">
-                <Avatar3D
-                  color={char.color}
-                  state={thinkingPhase === "thinking" ? "thinking" : streamingMsgId ? "streaming" : "idle"}
-                  customization={char.customization || {}}
-                />
-                <button
-                  className={`p3cust-toggle${showCustomizer ? " open" : ""}`}
-                  onClick={() => setShowCustomizer((p) => !p)}
+                <div 
+                  className="p3avatar-header"
+                  ref={avatarHeaderRef}
+                  onMouseDown={handleAvatarHeaderMouseDown}
+                  title="Drag to move window"
                 >
-                  {showCustomizer ? "✕ CLOSE" : "◐ CUSTOMIZE"}
-                </button>
-                {showCustomizer && (() => {
-                  const cust = char.customization || {};
-                  const SKIN_SWATCHES = [
-                    { key: "fair",   hex: "#f5d5b8" },
-                    { key: "light",  hex: "#e8c4a8" },
-                    { key: "medium", hex: "#c8966e" },
-                    { key: "tan",    hex: "#a8784e" },
-                    { key: "dark",   hex: "#6b3e2e" },
-                    { key: "deep",   hex: "#3c2016" },
-                  ];
-                  const HAIR_PRESETS = ["#1a1008", "#3b2010", "#7a4a20", "#c08040", "#e8d090", "#f0f0e8", "#d04040", "#404080"];
-                  const EYE_PRESETS  = ["#4a8fc0", "#3a9a60", "#8060a0", "#c07030", "#404050", "#60a8c0", "#a05030", "#50a080"];
-                  const CLOTH_PRESETS= ["#1a1a2e", "#0d2137", "#1e3a1e", "#2e1a0e", "#2a1a2a", "#1a2a1a", "#3a2010", "#101828"];
-                  return (
-                    <div className="p3cust-panel">
+                  ◆◆ AVATAR ◆◆
+                </div>
+                <div className="p3avatar-content">
+                  <Avatar3D
+                    color={char.color}
+                    state={thinkingPhase === "thinking" ? "thinking" : streamingMsgId ? "streaming" : "idle"}
+                    customization={char.customization || {}}
+                  />
+                  <button
+                    className={`p3cust-toggle${showCustomizer ? " open" : ""}`}
+                    onClick={() => setShowCustomizer((p) => !p)}
+                  >
+                    {showCustomizer ? "✕ CLOSE" : "◐ CUSTOMIZE"}
+                  </button>
+                  {showCustomizer && (() => {
+                    const cust = char.customization || {};
+                    const SKIN_SWATCHES = [
+                      { key: "fair",   hex: "#f5d5b8" },
+                      { key: "light",  hex: "#e8c4a8" },
+                      { key: "medium", hex: "#c8966e" },
+                      { key: "tan",    hex: "#a8784e" },
+                      { key: "dark",   hex: "#6b3e2e" },
+                      { key: "deep",   hex: "#3c2016" },
+                    ];
+                    const HAIR_PRESETS = ["#1a1008", "#3b2010", "#7a4a20", "#c08040", "#e8d090", "#f0f0e8", "#d04040", "#404080"];
+                    const EYE_PRESETS  = ["#4a8fc0", "#3a9a60", "#8060a0", "#c07030", "#404050", "#60a8c0", "#a05030", "#50a080"];
+                    const CLOTH_PRESETS= ["#1a1a2e", "#0d2137", "#1e3a1e", "#2e1a0e", "#2a1a2a", "#1a2a1a", "#3a2010", "#101828"];
+                    return (
+                      <div className="p3cust-panel">
 
                       <div className="p3cust-section">
                         <div className="p3cust-lbl">Skin Tone</div>
@@ -1107,6 +1203,7 @@ export default function PersonaChat() {
                     </div>
                   );
                 })()}
+                </div>
               </div>
               {/* Chat Panel */}
               <div className="p3chat-main">
@@ -1188,11 +1285,6 @@ export default function PersonaChat() {
                 </div>
               </div>
 
-              {/* FileExplorer Panel */}
-              <div className={`p3file-panel${showFileExplorer ? " open" : ""}`}>
-                <FileExplorer personaId={char.id} refreshKey={fileRefreshKey} charMeta={{ name: char.name, title: char.title, archetype: char.archetype, systemPrompt: char.systemPrompt }} />
-              </div>
-
               {/* FileExplorer Toggle Button */}
               <button
                 className={`p3file-toggle${showFileExplorer ? " active" : ""}`}
@@ -1201,6 +1293,27 @@ export default function PersonaChat() {
               >
                 {showFileExplorer ? "✕ CLOSE" : "📁 FILES"}
               </button>
+
+              {/* FileExplorer Modal */}
+              {showFileExplorer && (
+                <div className="p3file-modal" onClick={() => setShowFileExplorer(false)}>
+                  <div className="p3file-modal-content" onClick={(e) => e.stopPropagation()}>
+                    <div className="p3file-modal-header">
+                      <div className="p3file-modal-title">📁 My Computer</div>
+                      <button
+                        className="p3file-modal-close"
+                        onClick={() => setShowFileExplorer(false)}
+                        title="Close"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                    <div className="p3file-modal-body">
+                      <FileExplorer personaId={char.id} refreshKey={fileRefreshKey} charMeta={{ name: char.name, title: char.title, archetype: char.archetype, systemPrompt: char.systemPrompt }} />
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )}
