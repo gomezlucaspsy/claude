@@ -834,8 +834,19 @@ export default function PersonaChat() {
     setVoiceError("");
     intentionalStopRef.current = false;
     recognitionRef.current = recognition;
-    recognition.start();
-    setIsListening(true);
+    try {
+      recognition.start();
+      setIsListening(true);
+    } catch {
+      // Android sometimes throws "already started" if the previous instance hasn't
+      // fully torn down yet — retry shortly instead of leaving the mic dead.
+      recognitionRef.current = null;
+      if (liveMicMode && !intentionalStopRef.current) {
+        setTimeout(() => {
+          if (!intentionalStopRef.current) startListeningRef.current?.();
+        }, 300);
+      }
+    }
   };
   startListeningRef.current = startListening;
 
@@ -868,7 +879,14 @@ export default function PersonaChat() {
     if (typeof window === "undefined" || !navigator.mediaDevices?.getUserMedia) return;
     if (micStreamRef.current) return; // already running — avoid re-grabbing the mic
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      // Raw, unprocessed audio: Android Chrome's SpeechRecognition opens its own mic
+      // capture with echo cancellation on. Requesting the same processed mode here
+      // makes the two capture sessions fight over the single hardware AEC unit, and
+      // Android resolves that by killing one side — this is what read as the mic
+      // randomly cutting out. Asking for raw audio keeps this stream off that unit.
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
+      });
       micStreamRef.current = stream;
       const AudioCtx = window.AudioContext || window.webkitAudioContext;
       const ctx = new AudioCtx();
