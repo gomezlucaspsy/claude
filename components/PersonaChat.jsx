@@ -345,6 +345,7 @@ export default function PersonaChat() {
   const micAudioCtxRef = useRef(null);
   const micAnalyserRef = useRef(null);
   const micLevelRafRef = useRef(null);
+  const intentionalStopRef = useRef(false);
   const inputRef = useRef(null);
   const chatRef = useRef(null);
   const chatHeaderRef = useRef(null);
@@ -711,6 +712,7 @@ export default function PersonaChat() {
   };
 
   const stopListening = () => {
+    intentionalStopRef.current = true;
     if (recognitionRef.current) {
       try {
         recognitionRef.current.stop();
@@ -799,8 +801,11 @@ export default function PersonaChat() {
 
     recognition.onerror = (event) => {
       if (event.error === "aborted") return;
-      if (event.error === "not-allowed") {
-        setVoiceError("Microphone permission was denied.");
+      if (event.error === "not-allowed" || event.error === "service-not-allowed") {
+        intentionalStopRef.current = true; // permission truly denied — don't loop retrying
+        setVoiceError(
+          "Mic permission blocked. On Android Chrome: tap the lock icon in the address bar > Permissions > Microphone > Allow, then reload the page."
+        );
       } else if (event.error !== "no-speech") {
         setVoiceError(`Voice error: ${event.error}`);
       }
@@ -813,14 +818,25 @@ export default function PersonaChat() {
       if (!liveMicMode) {
         const trimmed = finalBuffer.trim();
         if (trimmed) setInput(trimmed);
+        return;
+      }
+      // Android Chrome's SpeechRecognition silently ends itself after periods of
+      // silence, screen/tab visibility changes, or brief mic suspension — without
+      // this restart the "live call" mic just goes dead with no error shown.
+      if (!intentionalStopRef.current) {
+        setTimeout(() => {
+          if (!intentionalStopRef.current) startListeningRef.current?.();
+        }, 300);
       }
     };
 
     setVoiceError("");
+    intentionalStopRef.current = false;
     recognitionRef.current = recognition;
     recognition.start();
     setIsListening(true);
   };
+  startListeningRef.current = startListening;
 
   const toggleListening = () => {
     if (isListening) stopListening();
@@ -908,8 +924,12 @@ export default function PersonaChat() {
       cameraStreamRef.current = stream;
       setCameraOn(true);
       setVoiceError("");
-    } catch {
-      setVoiceError("Camera access was blocked or unavailable.");
+    } catch (err) {
+      setVoiceError(
+        err?.name === "NotAllowedError"
+          ? "Camera permission blocked. On Android Chrome: tap the lock icon in the address bar > Permissions > Camera > Allow, then reload the page."
+          : "Camera access was blocked or unavailable."
+      );
       stopVideoCall();
       return;
     }
