@@ -1,0 +1,5 @@
+
+-Incluir opcion para descargar mas facil incluyendo el qr de la aplicacion https://github.com/gomezlucaspsy/Native similar a la funcionalidad que implemente en este Proyecto.
+-Incluir voz y videollamada en vivo camara, mantenlo simple y bien native, me gusta la forma en que claude console implementa esto sin latencia.
+-Para lo relacionado al video puedes esta biblioteca https://github.com/justadudewhohacks/face-api.js/ 
+-Incluye las funciones de la version web en el telefono falta el personaje 3d, la function de voz y las nuevas funciones, me gusta como implementa esto la pagina web replika.com
