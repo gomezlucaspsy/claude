@@ -1319,6 +1319,7 @@ export default function PersonaChat() {
         .p3call-topbar{position:absolute;top:0;left:0;right:0;z-index:5;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:calc(14px + env(safe-area-inset-top)) 16px 10px;}
         .p3call-pill{display:inline-flex;align-items:center;gap:8px;background:rgba(8,14,26,.6);border:1px solid rgba(255,255,255,.14);backdrop-filter:blur(10px);color:#eaf4ff;font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:1.4px;text-transform:uppercase;padding:8px 14px;border-radius:999px;}
         .p3call-pill .dot{width:6px;height:6px;border-radius:50%;background:#5eead4;box-shadow:0 0 8px #5eead4;flex-shrink:0;}
+        .p3call-error{position:absolute;top:calc(64px + env(safe-area-inset-top));left:16px;right:16px;z-index:6;background:rgba(40,10,14,.75);border:1px solid rgba(242,95,111,.6);backdrop-filter:blur(10px);color:#ffd0d6;font-family:'JetBrains Mono',monospace;font-size:11px;line-height:1.4;letter-spacing:.3px;padding:10px 14px;border-radius:14px;text-align:center;}
         .p3call-transcript-toggle{background:rgba(8,14,26,.6);border:1px solid rgba(255,255,255,.14);backdrop-filter:blur(10px);color:#eaf4ff;width:34px;height:34px;border-radius:50%;font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
         .p3cam-pip{position:absolute;bottom:16px;right:16px;width:88px;height:120px;border-radius:16px;overflow:hidden;border:1px solid rgba(255,255,255,.25);box-shadow:0 8px 20px rgba(0,0,0,.5);z-index:6;background:#000;}
         .p3cam-video{width:100%;height:100%;object-fit:cover;transform:scaleX(-1);display:block;}
@@ -1909,6 +1910,8 @@ export default function PersonaChat() {
                           </div>
                         </div>
                       )}
+
+                      {voiceError && <div className="p3call-error">{voiceError}</div>}
 
                       {messages.length > 0 && (
                         <div className="p3call-caption-wrap">
