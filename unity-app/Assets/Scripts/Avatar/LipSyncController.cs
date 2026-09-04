@@ -1,6 +1,6 @@
 using UnityEngine;
 
-namespace PersonaForge.Avatar
+namespace RobotForge.Avatar
 {
     /// <summary>
     /// Text-driven lip sync system. Analyzes streaming text tokens to drive mouth blend shapes.

@@ -1,6 +1,6 @@
 using UnityEngine;
 
-namespace PersonaForge.Avatar
+namespace RobotForge.Avatar
 {
     /// <summary>
     /// Controls the 3D avatar's idle animations, breathing, blinking, and state-driven behavior.

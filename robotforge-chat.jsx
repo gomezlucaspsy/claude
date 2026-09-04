@@ -14,7 +14,7 @@ const TypingIndicator = ({ color }) => (
   </div>
 );
 
-export default function PersonaChat() {
+export default function RobotForgeChat() {
   const [selectedChar, setSelectedChar] = useState(null);
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
@@ -70,7 +70,7 @@ export default function PersonaChat() {
     } catch (e) {
       setMessages((prev) => [...prev, {
         role: "assistant",
-        content: "...The connection was severed. Something stirs in the Dark Hour.",
+        content: "...The connection was severed. Something stirs in the Null Hour.",
         id: Date.now(),
       }]);
     } finally {
@@ -691,13 +691,13 @@ export default function PersonaChat() {
         {/* Decorative corners */}
         <div className="corner-tl" />
         <div className="corner-br" />
-        <div className="arcana-watermark">MEMENTO MORI — DARK HOUR SYSTEM</div>
+        <div className="arcana-watermark">MEMENTO MORI — NULL HOUR SYSTEM</div>
 
         {phase === "select" && (
           <div className="select-screen">
             <div className="title-block">
-              <div className="title-eyebrow">[ DARK HOUR NETWORK ]</div>
-              <div className="title-main">PERSONA</div>
+              <div className="title-eyebrow">[ NULL HOUR NETWORK ]</div>
+              <div className="title-main">ROBOTFORGE</div>
               <div className="title-sub">DIALOGUE SYSTEM</div>
               <div className="title-divider" />
             </div>
@@ -744,7 +744,7 @@ export default function PersonaChat() {
             {/* Status bar */}
             <div className="status-bar">
               <div className="status-dot" />
-              <div className="status-text">DARK HOUR — CONNECTION ACTIVE</div>
+              <div className="status-text">NULL HOUR — CONNECTION ACTIVE</div>
               <div className="status-time">{new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</div>
             </div>
 

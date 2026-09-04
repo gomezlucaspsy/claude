@@ -1,4 +1,4 @@
-# PersonaForge — Unity Native App
+# RobotForge — Unity Native App
 
 Replika-level AI companion with a real-time 3D avatar, built in Unity for mobile and desktop.
 
@@ -34,7 +34,7 @@ unity-app/
 
 1. Open **Unity Hub** → **New Project**
 2. Select **3D (URP)** template — Universal Render Pipeline gives you good mobile + desktop quality
-3. Name it `PersonaForge` and create
+3. Name it `RobotForge` and create
 
 ### 2. Import Scripts
 

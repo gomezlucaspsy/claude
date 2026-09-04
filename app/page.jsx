@@ -1,5 +1,5 @@
-import PersonaChat from "@/components/PersonaChat";
+import RobotForgeChat from "@/components/RobotForgeChat";
 
 export default function HomePage() {
-  return <PersonaChat />;
+  return <RobotForgeChat />;
 }

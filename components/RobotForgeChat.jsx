@@ -281,7 +281,7 @@ const CymaticsBar = ({ active, color, bars = 14 }) => (
   </div>
 );
 
-export default function PersonaChat() {
+export default function RobotForgeChat() {
   const [characters, setCharacters] = useState(DEFAULT_CHARACTERS);
   const [phase, setPhase] = useState("select");
   const [selectedChar, setSelectedChar] = useState(null);

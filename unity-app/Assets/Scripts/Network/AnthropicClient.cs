@@ -5,7 +5,7 @@ using System.Text;
 using UnityEngine;
 using UnityEngine.Networking;
 
-namespace PersonaForge.Network
+namespace RobotForge.Network
 {
     [Serializable]
     public class ChatMessage

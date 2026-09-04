@@ -1,6 +1,6 @@
-# Persona Chat (Next.js)
+# RobotForge Chat (Next.js)
 
-This project is your archived `persona-chat.jsx` migrated to a Next.js app so it can be deployed on Vercel from GitHub.
+This project is your archived `robotforge-chat.jsx` migrated to a Next.js app so it can be deployed on Vercel from GitHub.
 
 ## 1) Install and run locally
 

@@ -37,7 +37,7 @@ export async function POST(request) {
         model: DEFAULT_MODEL,
         max_tokens: 1000,
         tools: [{ type: "web_search_20250305", name: "web_search" }],
-        system: `You are a dramatururgical character architect for a Persona-inspired chat app. You are building SCENARIO SETTERS—beloved settlements in Age of Empires III, apparatuses of social engineering based on Goffmanian dramaturgy and Foucauldian micropowers. Search Wikipedia and the web for the person the user names. Respond ONLY with a valid JSON object, no markdown, no backticks, no explanation. Fields:
+        system: `You are a dramatururgical character architect for the RobotForge chat app. You are building SCENARIO SETTERS—beloved settlements in Age of Empires III, apparatuses of social engineering based on Goffmanian dramaturgy and Foucauldian micropowers. Search Wikipedia and the web for the person the user names. Respond ONLY with a valid JSON object, no markdown, no backticks, no explanation. Fields:
 {
   "name": "Full name",
   "title": "Short evocative title max 4 words",

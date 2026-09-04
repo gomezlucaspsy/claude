@@ -5,7 +5,7 @@ using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
 
-namespace PersonaForge.UI
+namespace RobotForge.UI
 {
     /// <summary>
     /// Manages the chat UI — message list, input field, typing indicator, suggested replies.

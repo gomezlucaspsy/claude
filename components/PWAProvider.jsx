@@ -259,13 +259,13 @@ export default function PWAProvider() {
           <div className="pwa-eyebrow">[ SYSTEM PROTOCOL ]</div>
           <span className="pwa-icon">⚡</span>
           <div className="pwa-title">Install App</div>
-          <div className="pwa-subtitle">Dark Hour Network</div>
+          <div className="pwa-subtitle">Null Hour Network</div>
           <div className="pwa-divider" />
 
           {platform === "android" ? (
             <>
               <p className="pwa-body">
-                Install PersonaForge directly to your device — no app store required.
+                Install RobotForge directly to your device — no app store required.
                 Full offline access, faster load times, and a native app experience.
               </p>
               <button className="pwa-install-btn" onClick={handleInstall}>
@@ -275,7 +275,7 @@ export default function PWAProvider() {
           ) : (
             <>
               <p className="pwa-body">
-                Add PersonaForge to your home screen for a full native experience.
+                Add RobotForge to your home screen for a full native experience.
               </p>
               <ol className="pwa-steps">
                 <li className="pwa-step">

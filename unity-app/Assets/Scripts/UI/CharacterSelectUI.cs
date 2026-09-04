@@ -2,7 +2,7 @@ using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace PersonaForge.UI
+namespace RobotForge.UI
 {
     /// <summary>
     /// Character selection screen. Displays character cards in a grid.

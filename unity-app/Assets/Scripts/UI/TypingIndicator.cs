@@ -1,6 +1,6 @@
 using UnityEngine;
 
-namespace PersonaForge.UI
+namespace RobotForge.UI
 {
     /// <summary>
     /// Typing indicator with 3 animated dots. Attach to the TypingIndicator prefab.

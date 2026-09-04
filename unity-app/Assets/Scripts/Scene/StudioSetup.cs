@@ -1,7 +1,7 @@
 using UnityEngine;
 using UnityEngine.Rendering;
 
-namespace PersonaForge.Scene
+namespace RobotForge.Scene
 {
     /// <summary>
     /// Sets up a Replika-style camera and studio lighting rig.

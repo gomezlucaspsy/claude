@@ -1,6 +1,6 @@
 using UnityEngine;
 
-namespace PersonaForge.Scene
+namespace RobotForge.Scene
 {
     /// <summary>
     /// Floating ambient particles around the avatar. Replika-style soft particle effect.

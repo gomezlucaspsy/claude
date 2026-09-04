@@ -2,13 +2,13 @@ import "./globals.css";
 import PWAProvider from "@/components/PWAProvider";
 
 export const metadata = {
-  title: "Persona Dialogue System",
-  description: "Character AI chat experience inspired by Persona.",
+  title: "RobotForge Dialogue System",
+  description: "Character AI chat experience with fully customizable companions.",
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
-    title: "Persona Chat",
+    title: "RobotForge Chat",
   },
 };
 
@@ -28,7 +28,7 @@ export default function RootLayout({ children }) {
         <meta name="mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-        <meta name="apple-mobile-web-app-title" content="Persona Chat" />
+        <meta name="apple-mobile-web-app-title" content="RobotForge Chat" />
         <link rel="apple-touch-icon" href="/icons/icon.svg" />
         <link rel="icon" type="image/svg+xml" href="/icons/icon.svg" />
         <meta name="msapplication-TileColor" content="#030714" />

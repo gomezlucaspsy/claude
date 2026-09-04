@@ -1,6 +1,6 @@
 using UnityEngine;
 
-namespace PersonaForge.Avatar
+namespace RobotForge.Avatar
 {
     /// <summary>
     /// Manages facial expression states through blend shapes.

@@ -1,11 +1,11 @@
 using System.Collections.Generic;
 using UnityEngine;
-using PersonaForge.Avatar;
-using PersonaForge.Network;
-using PersonaForge.Scene;
-using PersonaForge.UI;
+using RobotForge.Avatar;
+using RobotForge.Network;
+using RobotForge.Scene;
+using RobotForge.UI;
 
-namespace PersonaForge.Core
+namespace RobotForge.Core
 {
     /// <summary>
     /// Main application controller. Wires together all systems:
