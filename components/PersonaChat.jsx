@@ -37,97 +37,22 @@ const COLOR_PRESETS = ["#4a8fc0", "#e8c84a", "#c0392b", "#6b4fa0", "#00cc44", "#
 
 const AVATAR_OPTIONS = ["💻", "👑", "🤖", "🌙", "🔥", "⚔️", "🌀", "🎭", "📖", "🧠", "🎸", "🌹", "⭐", "🗡️", "🔮", "🎩", "👁️", "🌊", "🦅", "🐍", "🌌", "⚙️"];
 
-const THEME_PRESETS = {
-  aurora: {
-    label: "Aurora Shell",
-    vars: {
-      "--sys-bg": "#030714",
-      "--sys-bg-flare": "rgba(51,120,255,.18)",
-      "--sys-panel": "rgba(8,15,32,.82)",
-      "--sys-panel-soft": "rgba(17,32,64,.66)",
-      "--sys-line": "rgba(123,183,255,.24)",
-      "--sys-line-soft": "rgba(123,183,255,.16)",
-      "--sys-text": "#edf6ff",
-      "--sys-muted": "rgba(176,220,255,.78)",
-      "--sys-accent": "#8fd7ff",
-      "--sys-accent-strong": "#5ec2ff",
-      "--sys-accent-soft": "rgba(127,216,255,.35)",
-      "--sys-danger": "#f25f6f",
-      "--sys-grid": "rgba(70,130,210,.12)",
-    },
-  },
-  harbor: {
-    label: "Harbor Night",
-    vars: {
-      "--sys-bg": "#041010",
-      "--sys-bg-flare": "rgba(21,145,133,.2)",
-      "--sys-panel": "rgba(8,25,25,.84)",
-      "--sys-panel-soft": "rgba(16,47,47,.68)",
-      "--sys-line": "rgba(93,201,195,.24)",
-      "--sys-line-soft": "rgba(93,201,195,.16)",
-      "--sys-text": "#e9fffd",
-      "--sys-muted": "rgba(165,240,232,.8)",
-      "--sys-accent": "#85f3dd",
-      "--sys-accent-strong": "#4deacb",
-      "--sys-accent-soft": "rgba(133,243,221,.32)",
-      "--sys-danger": "#ff7f98",
-      "--sys-grid": "rgba(66,166,155,.15)",
-    },
-  },
-  slate: {
-    label: "Slate Core",
-    vars: {
-      "--sys-bg": "#0a0d14",
-      "--sys-bg-flare": "rgba(124,143,188,.17)",
-      "--sys-panel": "rgba(20,26,40,.84)",
-      "--sys-panel-soft": "rgba(33,42,62,.68)",
-      "--sys-line": "rgba(170,186,219,.24)",
-      "--sys-line-soft": "rgba(170,186,219,.16)",
-      "--sys-text": "#f2f5ff",
-      "--sys-muted": "rgba(209,219,245,.8)",
-      "--sys-accent": "#b3c2ff",
-      "--sys-accent-strong": "#94a8ff",
-      "--sys-accent-soft": "rgba(179,194,255,.28)",
-      "--sys-danger": "#ff8ca0",
-      "--sys-grid": "rgba(119,134,166,.14)",
-    },
-  },
-  companion: {
-    label: "Companion",
-    vars: {
-      "--sys-bg": "#0c0f1a",
-      "--sys-bg-flare": "rgba(100,160,255,.12)",
-      "--sys-panel": "rgba(16,22,38,.88)",
-      "--sys-panel-soft": "rgba(24,34,58,.72)",
-      "--sys-line": "rgba(130,180,255,.18)",
-      "--sys-line-soft": "rgba(130,180,255,.1)",
-      "--sys-text": "#f0f4ff",
-      "--sys-muted": "rgba(190,215,255,.72)",
-      "--sys-accent": "#7eb8ff",
-      "--sys-accent-strong": "#5ca0ff",
-      "--sys-accent-soft": "rgba(126,184,255,.2)",
-      "--sys-danger": "#ff8ca0",
-      "--sys-grid": "rgba(80,130,220,.08)",
-    },
-  },
-  ember: {
-    label: "Ember Heart",
-    vars: {
-      "--sys-bg": "#100a08",
-      "--sys-bg-flare": "rgba(255,140,60,.12)",
-      "--sys-panel": "rgba(28,18,14,.88)",
-      "--sys-panel-soft": "rgba(42,28,22,.72)",
-      "--sys-line": "rgba(255,180,120,.18)",
-      "--sys-line-soft": "rgba(255,180,120,.1)",
-      "--sys-text": "#fff5ee",
-      "--sys-muted": "rgba(255,210,180,.72)",
-      "--sys-accent": "#ffb088",
-      "--sys-accent-strong": "#ff9060",
-      "--sys-accent-soft": "rgba(255,176,136,.2)",
-      "--sys-danger": "#ff6b7a",
-      "--sys-grid": "rgba(220,130,70,.08)",
-    },
-  },
+// Single fixed look — Aurora Shell. A theme switcher used to live here, but its
+// mobile header bar kept overlapping the install button, so the option is gone.
+const AURORA_THEME_VARS = {
+  "--sys-bg": "#030714",
+  "--sys-bg-flare": "rgba(51,120,255,.18)",
+  "--sys-panel": "rgba(8,15,32,.82)",
+  "--sys-panel-soft": "rgba(17,32,64,.66)",
+  "--sys-line": "rgba(123,183,255,.24)",
+  "--sys-line-soft": "rgba(123,183,255,.16)",
+  "--sys-text": "#edf6ff",
+  "--sys-muted": "rgba(176,220,255,.78)",
+  "--sys-accent": "#8fd7ff",
+  "--sys-accent-strong": "#5ec2ff",
+  "--sys-accent-soft": "rgba(127,216,255,.35)",
+  "--sys-danger": "#f25f6f",
+  "--sys-grid": "rgba(70,130,210,.12)",
 };
 
 const DEFAULT_CHARACTERS = [
@@ -208,20 +133,6 @@ const loadCharacters = () => {
 const saveCharacters = (chars) => {
   try {
     localStorage.setItem("persona_characters_v2", JSON.stringify(chars));
-  } catch {}
-};
-
-const loadTheme = () => {
-  try {
-    const stored = localStorage.getItem("persona_theme_v1");
-    if (stored && THEME_PRESETS[stored]) return stored;
-  } catch {}
-  return "aurora";
-};
-
-const saveTheme = (themeKey) => {
-  try {
-    localStorage.setItem("persona_theme_v1", themeKey);
   } catch {}
 };
 
@@ -306,7 +217,6 @@ export default function PersonaChat() {
   const [searchQuery, setSearchQuery] = useState("");
   const [isSearching, setIsSearching] = useState(false);
   const [searchStatus, setSearchStatus] = useState("");
-  const [themeKey, setThemeKey] = useState("aurora");
   const [suggestions, setSuggestions] = useState([]);
   const [streamingMsgId, setStreamingMsgId] = useState(null);
   const [thinkingPhase, setThinkingPhase] = useState(null);
@@ -376,13 +286,6 @@ export default function PersonaChat() {
       }
     } catch {}
 
-    try {
-      const storedTheme = localStorage.getItem("persona_theme_v1");
-      if (storedTheme && THEME_PRESETS[storedTheme]) {
-        setThemeKey(storedTheme);
-      }
-    } catch {}
-
     return undefined;
   }, []);
 
@@ -404,12 +307,6 @@ export default function PersonaChat() {
       saveCharacters(characters);
     }
   }, [characters, isClient]);
-  useEffect(() => {
-    if (isClient) {
-      saveTheme(themeKey);
-    }
-  }, [themeKey, isClient]);
-
   useEffect(() => {
     if (typeof window === "undefined") return;
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -1065,7 +962,6 @@ export default function PersonaChat() {
   }, []);
 
   const char = selectedChar;
-  const activeTheme = THEME_PRESETS[themeKey] || THEME_PRESETS.aurora;
 
   return (
     <>
@@ -1099,10 +995,6 @@ export default function PersonaChat() {
         .p3time{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--sys-text);letter-spacing:.4px;padding-right:8px;border-right:1px solid var(--sys-line);}
         .p3chip{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--sys-muted);padding:6px 11px;border-radius:999px;border:1px solid var(--sys-line);background:var(--sys-panel-soft);text-transform:uppercase;letter-spacing:.8px;}
         .p3chip.active{color:var(--sys-text);border-color:var(--sys-accent);background:linear-gradient(145deg,var(--sys-accent-soft),rgba(255,255,255,.08));}
-        .p3theme{position:fixed;top:calc(16px + env(safe-area-inset-top));right:18px;z-index:50;background:var(--sys-panel);border:1px solid var(--sys-line);border-radius:999px;padding:9px 12px;backdrop-filter:blur(12px);display:flex;align-items:center;gap:8px;box-shadow:0 10px 22px rgba(0,0,0,.22);}
-        .p3theme-label{font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:1px;color:var(--sys-muted);text-transform:uppercase;}
-        .p3theme-sel{background:rgba(7,15,34,.9);border:1px solid var(--sys-line);color:var(--sys-text);font-family:'JetBrains Mono',monospace;font-size:10px;padding:7px 12px;border-radius:999px;outline:none;cursor:pointer;}
-        .p3theme-sel:focus{border-color:var(--sys-accent);box-shadow:0 0 0 2px var(--sys-accent-soft);}
 
   .p3sel{display:flex;flex-direction:column;align-items:center;height:100vh;height:100dvh;padding:30px 26px 82px;position:relative;z-index:10;animation:p3up .6s ease forwards;overflow-y:auto;scrollbar-width:thin;scrollbar-color:rgba(111,173,255,.35) transparent;-webkit-overflow-scrolling:touch;touch-action:pan-y;}
         .p3sel::-webkit-scrollbar{width:6px;}
@@ -1356,8 +1248,7 @@ export default function PersonaChat() {
           .p3chac { display: none; }
           .p3srch-row { flex-direction: column; }
           .p3grid2 { grid-template-columns: repeat(auto-fill,minmax(170px,1fr)); gap: 12px; }
-          .p3theme { left: 14px; right: 14px; top: calc(12px + env(safe-area-inset-top)); justify-content: space-between; }
-          .p3sys { top: calc(66px + env(safe-area-inset-top)); left: 14px; right: 14px; justify-content: space-between; padding: 8px 10px; gap: 6px; }
+          .p3sys { top: calc(12px + env(safe-area-inset-top)); left: 14px; right: 14px; justify-content: space-between; padding: 8px 10px; gap: 6px; }
           .p3chip { padding: 6px 8px; font-size: 9px; }
           .p3ch,
           .p3stat,
@@ -1379,11 +1270,11 @@ export default function PersonaChat() {
       `}</style>
 
       <div
-        className={`p3app theme-${themeKey}`}
+        className="p3app theme-aurora"
         style={{
           "--cc": char?.color || "#4a8fc0",
           "--cg": char?.color ? char.color + "66" : "rgba(74,143,192,0.4)",
-          ...activeTheme.vars,
+          ...AURORA_THEME_VARS,
         }}
       >
         <div className="p3grid" />
@@ -1395,18 +1286,6 @@ export default function PersonaChat() {
         <div className="p3tl" />
         <div className="p3br" />
         {!isLiveCallUI && <div className="p3wm">ORBITAL FREEBASE // SOCIAL LINK OS</div>}
-        {!isLiveCallUI && (
-          <div className="p3theme">
-            <span className="p3theme-label">Theme</span>
-            <select className="p3theme-sel" value={themeKey} onChange={(e) => setThemeKey(e.target.value)}>
-              {Object.entries(THEME_PRESETS).map(([key, theme]) => (
-                <option key={key} value={key}>
-                  {theme.label}
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
         {!isLiveCallUI && <InstallQR color={char?.color || "#4a8fc0"} />}
 
         {deleteConfirm && (
