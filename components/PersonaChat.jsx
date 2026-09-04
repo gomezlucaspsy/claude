@@ -345,6 +345,7 @@ export default function PersonaChat() {
   const micAudioCtxRef = useRef(null);
   const micAnalyserRef = useRef(null);
   const micLevelRafRef = useRef(null);
+  const micStopTimeoutRef = useRef(null);
   const intentionalStopRef = useRef(false);
   const inputRef = useRef(null);
   const chatRef = useRef(null);
@@ -865,6 +866,7 @@ export default function PersonaChat() {
 
   const startMicLevel = useCallback(async () => {
     if (typeof window === "undefined" || !navigator.mediaDevices?.getUserMedia) return;
+    if (micStreamRef.current) return; // already running — avoid re-grabbing the mic
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       micStreamRef.current = stream;
@@ -894,8 +896,22 @@ export default function PersonaChat() {
   }, []);
 
   useEffect(() => {
-    if (isListening) startMicLevel();
-    else stopMicLevel();
+    if (isListening) {
+      // Cancel any pending teardown from a moment ago — on Android, SpeechRecognition
+      // silently ends and restarts itself constantly, flipping isListening off/on within
+      // ~300ms. Without this guard, that flicker tore down and re-requested the raw mic
+      // stream every cycle, which reads to the user as the mic turning on and off.
+      if (micStopTimeoutRef.current) {
+        clearTimeout(micStopTimeoutRef.current);
+        micStopTimeoutRef.current = null;
+      }
+      startMicLevel();
+    } else {
+      micStopTimeoutRef.current = setTimeout(() => {
+        micStopTimeoutRef.current = null;
+        stopMicLevel();
+      }, 600);
+    }
   }, [isListening, startMicLevel, stopMicLevel]);
 
   // Live camera — self-view + face-api.js expression detection mirrored onto the avatar
@@ -1004,6 +1020,10 @@ export default function PersonaChat() {
 
   useEffect(() => {
     return () => {
+      if (micStopTimeoutRef.current) {
+        clearTimeout(micStopTimeoutRef.current);
+        micStopTimeoutRef.current = null;
+      }
       stopVideoCall();
       stopMicLevel();
     };
