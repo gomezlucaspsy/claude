@@ -13,6 +13,14 @@ try {
 const nextConfig = {
   reactStrictMode: true,
   transpilePackages: ["three", "@react-three/fiber", "@react-three/drei"],
+  webpack: (config, { isServer }) => {
+    if (!isServer) {
+      // face-api.js drags in Node-only branches (fs, node-fetch's optional
+      // "encoding" dep) that are never reached in the browser bundle.
+      config.resolve.fallback = { ...config.resolve.fallback, fs: false, encoding: false };
+    }
+    return config;
+  },
 };
 
 export default nextConfig;

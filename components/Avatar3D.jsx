@@ -20,7 +20,19 @@ const SKIN_TONES = {
   deep:   { base: "#3c2016", shadow: "#2a1408", lip: "#5a2818" },
 };
 
-function RealisticBody({ color, state, customization = {} }) {
+// Per-expression target deltas (brow lift, mouth-open bias, head-tilt bias) —
+// blended in continuously so the face visibly mirrors the caller's detected expression.
+const EXPRESSION_TARGETS = {
+  happy:     { brow: -0.008, mouth: 0.16, headX: -0.012 },
+  surprised: { brow: 0.032,  mouth: 0.38, headX: 0.01 },
+  sad:       { brow: 0.02,   mouth: 0.02, headX: 0.03 },
+  angry:     { brow: 0.024,  mouth: 0.05, headX: -0.018 },
+  disgusted: { brow: 0.018,  mouth: 0.08, headX: 0.012 },
+  fearful:   { brow: 0.03,   mouth: 0.14, headX: 0 },
+  neutral:   { brow: 0, mouth: 0, headX: 0 },
+};
+
+function RealisticBody({ color, state, customization = {}, micLevel = 0, expression = null }) {
   const groupRef = useRef();
   const headRef = useRef();
   const eyeLeftRef = useRef();
@@ -35,6 +47,8 @@ function RealisticBody({ color, state, customization = {} }) {
   const mouthOpenRef = useRef(0);
   const headTiltRef = useRef({ x: 0, y: 0, z: 0 });
   const browRef = useRef(0);
+  const micReactRef = useRef(0);
+  const exprRef = useRef({ brow: 0, mouth: 0, headX: 0 });
 
   // Resolve customization options
   const skinPreset   = SKIN_TONES[customization.skinTone] || SKIN_TONES.light;
@@ -121,12 +135,22 @@ function RealisticBody({ color, state, customization = {} }) {
     groupRef.current.rotation.z = Math.sin(t * 0.25) * 0.008;
     groupRef.current.rotation.y = Math.sin(t * 0.18) * 0.015;
 
-    // Head movement - smooth and natural
-    const targetX = state === "thinking"
-      ? -0.06 + Math.sin(t * 0.4) * 0.02
-      : Math.sin(t * 0.3 + 0.5) * 0.025;
+    // Live mic volume (0..1) — smoothed so the avatar visibly "leans in" while you talk
+    micReactRef.current = damp(micReactRef.current, micLevel, 6, delta);
+
+    // Detected camera expression — smoothed blend toward the matching target pose
+    const exprTarget = EXPRESSION_TARGETS[expression] || EXPRESSION_TARGETS.neutral;
+    exprRef.current.brow = damp(exprRef.current.brow, exprTarget.brow, 5, delta);
+    exprRef.current.mouth = damp(exprRef.current.mouth, exprTarget.mouth, 5, delta);
+    exprRef.current.headX = damp(exprRef.current.headX, exprTarget.headX, 5, delta);
+
+    // Head movement - smooth and natural, more attentive the louder you speak
+    const listenBoost = 1 + micReactRef.current * 1.6;
+    const targetX = (state === "thinking"
+      ? (-0.06 + Math.sin(t * 0.4) * 0.02) * listenBoost
+      : Math.sin(t * 0.3 + 0.5) * 0.025) + exprRef.current.headX;
     const targetY = state === "thinking"
-      ? Math.sin(t * 0.35) * 0.06
+      ? Math.sin(t * 0.35) * 0.06 * listenBoost
       : Math.sin(t * 0.22) * 0.03;
     const targetZ = Math.sin(t * 0.28) * 0.015;
 
@@ -163,9 +187,9 @@ function RealisticBody({ color, state, customization = {} }) {
     }
 
     // Mouth animation
-    let targetMouth = 0;
+    let targetMouth = exprRef.current.mouth;
     if (state === "streaming") {
-      targetMouth = 0.3 + Math.sin(t * 10) * 0.2 + Math.sin(t * 7.3) * 0.1;
+      targetMouth += 0.3 + Math.sin(t * 10) * 0.2 + Math.sin(t * 7.3) * 0.1;
     }
     mouthOpenRef.current = damp(mouthOpenRef.current, targetMouth, 8, delta);
 
@@ -176,8 +200,8 @@ function RealisticBody({ color, state, customization = {} }) {
       upperLipRef.current.position.y = -0.1 + mouthOpenRef.current * 0.005;
     }
 
-    // Eyebrow expression
-    const targetBrow = state === "thinking" ? 0.012 : 0;
+    // Eyebrow expression — attentiveness from mic volume + mirrored camera expression
+    const targetBrow = (state === "thinking" ? 0.012 * listenBoost : 0) + exprRef.current.brow;
     browRef.current = damp(browRef.current, targetBrow, 3, delta);
     if (leftBrowRef.current) {
       leftBrowRef.current.position.y = 0.12 + browRef.current;
@@ -703,7 +727,7 @@ function GlowRing({ color }) {
   );
 }
 
-export default function Avatar3D({ color = "#4a8fc0", state = "idle", customization = {} }) {
+export default function Avatar3D({ color = "#4a8fc0", state = "idle", customization = {}, micLevel = 0, expression = null, closeUp = false, hideLabel = false }) {
   const [hasError, setHasError] = useState(false);
   const [isMobileProfile, setIsMobileProfile] = useState(false);
 
@@ -741,7 +765,7 @@ export default function Avatar3D({ color = "#4a8fc0", state = "idle", customizat
   return (
     <div style={{ width: "100%", height: "100%", position: "relative" }}>
       <Canvas
-        camera={{ position: [0, 0.15, 2.2], fov: 30 }}
+        camera={closeUp ? { position: [0, 0.02, 1.5], fov: 26 } : { position: [0, 0.15, 2.2], fov: 30 }}
         dpr={dpr}
         gl={{
           antialias: !isMobileProfile,
@@ -769,7 +793,7 @@ export default function Avatar3D({ color = "#4a8fc0", state = "idle", customizat
         {/* Avatar mesh — own Suspense so it renders independently of Environment */}
         <Suspense fallback={null}>
           <Float speed={1.2} rotationIntensity={0.05} floatIntensity={0.15} floatingRange={[-0.02, 0.02]}>
-            <RealisticBody color={color} state={state} customization={customization} />
+            <RealisticBody color={color} state={state} customization={customization} micLevel={micLevel} expression={expression} />
           </Float>
           <Particles color={color} count={particleCount} />
           <GlowRing color={color} />
@@ -784,7 +808,7 @@ export default function Avatar3D({ color = "#4a8fc0", state = "idle", customizat
         )}
       </Canvas>
 
-      <div style={{
+      {!hideLabel && <div style={{
         position: "absolute",
         bottom: 16,
         left: "50%",
@@ -800,7 +824,7 @@ export default function Avatar3D({ color = "#4a8fc0", state = "idle", customizat
         textShadow: `0 0 10px ${color}66`,
       }}>
         {state === "thinking" ? "thinking..." : state === "streaming" ? "speaking" : "online"}
-      </div>
+      </div>}
     </div>
   );
 }
