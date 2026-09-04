@@ -6,6 +6,7 @@ import { mcGetTree, mcApplyAction } from "./FileExplorer";
 
 const Avatar3D = dynamic(() => import("./Avatar3D"), { ssr: false });
 const FileExplorer = dynamic(() => import("./FileExplorer"), { ssr: false });
+const InstallQR = dynamic(() => import("./InstallQR"), { ssr: false });
 
 
 const ARCANA_OPTIONS = [
@@ -318,6 +319,7 @@ export default function PersonaChat() {
   const [faceApiStatus, setFaceApiStatus] = useState("idle"); // idle | loading | ready
   const [detectedExpression, setDetectedExpression] = useState(null);
   const [micLevel, setMicLevel] = useState(0); // 0..1 live mic volume, drives avatar reactivity
+  const [showCallTranscript, setShowCallTranscript] = useState(false);
   const thinkTimerRef = useRef(null);
   const recognitionRef = useRef(null);
   const lastVoiceSendRef = useRef(0);
@@ -1247,21 +1249,34 @@ export default function PersonaChat() {
         .p3think-text{font-family:'Inter',sans-serif;font-size:13px;color:var(--sys-muted);font-style:italic;}
         .p3think-dots{font-family:'Inter',sans-serif;font-size:13px;color:var(--sys-muted);animation:p3flicker 1.5s ease infinite;}
 
-        .p3call-wrap{flex:1;display:grid;grid-template-columns:1fr 340px;grid-template-rows:1fr;position:relative;overflow:hidden;min-height:0;}
-        .p3call-wrap::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse at 70% 40%,var(--sys-bg-flare),transparent 60%);pointer-events:none;z-index:0;}
-        .p3call-left{position:relative;z-index:1;display:flex;flex-direction:column;overflow:hidden;border-right:1px solid var(--sys-line-soft);min-height:0;}
+        /* Full-screen call takeover — avatar fills the viewport, floating round
+           controls dock at the bottom, replika-style rather than a boxed panel. */
+        .p3call-full{position:fixed;inset:0;z-index:400;display:flex;flex-direction:column;background:#05070c;}
+        .p3call-stage{position:relative;flex:1;min-height:0;overflow:hidden;background:radial-gradient(ellipse at 50% 28%,var(--cc,#4a8fc0)22,transparent 62%),linear-gradient(180deg,#0a0f1c 0%,#05070c 72%);}
+        .p3call-topbar{position:absolute;top:0;left:0;right:0;z-index:5;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:calc(14px + env(safe-area-inset-top)) 16px 10px;}
+        .p3call-pill{display:inline-flex;align-items:center;gap:8px;background:rgba(8,14,26,.6);border:1px solid rgba(255,255,255,.14);backdrop-filter:blur(10px);color:#eaf4ff;font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:1.4px;text-transform:uppercase;padding:8px 14px;border-radius:999px;}
+        .p3call-pill .dot{width:6px;height:6px;border-radius:50%;background:#5eead4;box-shadow:0 0 8px #5eead4;flex-shrink:0;}
+        .p3call-transcript-toggle{background:rgba(8,14,26,.6);border:1px solid rgba(255,255,255,.14);backdrop-filter:blur(10px);color:#eaf4ff;width:34px;height:34px;border-radius:50%;font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+        .p3cam-pip{position:absolute;bottom:16px;right:16px;width:88px;height:120px;border-radius:16px;overflow:hidden;border:1px solid rgba(255,255,255,.25);box-shadow:0 8px 20px rgba(0,0,0,.5);z-index:6;background:#000;}
+        .p3cam-video{width:100%;height:100%;object-fit:cover;transform:scaleX(-1);display:block;}
+        .p3cam-tag{position:absolute;left:0;right:0;bottom:0;background:rgba(2,6,14,.72);color:var(--cc,#4a8fc0);font-family:'JetBrains Mono',monospace;font-size:8px;letter-spacing:.6px;text-align:center;padding:2px 0;text-transform:uppercase;}
+        .p3call-caption-wrap{position:absolute;left:16px;right:16px;bottom:16px;z-index:5;display:flex;justify-content:center;pointer-events:none;}
+        .p3call-caption{max-width:88%;font-family:'Inter',sans-serif;font-size:14px;line-height:1.45;padding:11px 16px;border-radius:20px;box-shadow:0 10px 26px rgba(0,0,0,.4);animation:p3up .25s ease forwards;}
+        .p3call-caption.assistant{background:rgba(255,255,255,.96);color:#141821;border-bottom-left-radius:6px;}
+        .p3call-caption.user{background:var(--cc,#4a8fc0);color:#fff;border-bottom-right-radius:6px;margin-left:auto;}
+        .p3call-dock{position:relative;z-index:6;display:flex;align-items:center;justify-content:center;gap:16px;padding:16px 16px calc(18px + env(safe-area-inset-bottom));background:linear-gradient(0deg,rgba(5,7,12,.95),rgba(5,7,12,.55));flex-wrap:wrap;}
+        .p3call-round{width:54px;height:54px;border-radius:50%;border:1px solid rgba(255,255,255,.16);background:rgba(255,255,255,.08);backdrop-filter:blur(8px);color:#eaf4ff;font-size:19px;display:flex;align-items:center;justify-content:center;cursor:pointer;transition:all .15s ease;flex-shrink:0;}
+        .p3call-round:hover{background:rgba(255,255,255,.16);}
+        .p3call-round.active{background:var(--cc,#4a8fc0);border-color:var(--cc,#4a8fc0);color:#06101c;}
+        .p3call-round.end{background:#e5484d;border-color:#e5484d;color:#fff;}
+        .p3call-round.end:hover{background:#ff5b60;}
+        .p3call-round:disabled{opacity:.4;cursor:not-allowed;}
+        .p3call-transcript{position:absolute;inset:0;z-index:8;background:rgba(4,7,14,.88);backdrop-filter:blur(6px);display:flex;flex-direction:column;}
+        .p3call-transcript-head{display:flex;align-items:center;justify-content:space-between;padding:calc(14px + env(safe-area-inset-top)) 18px 10px;border-bottom:1px solid var(--sys-line-soft);}
+        .p3call-transcript-head span{font-family:'Orbitron',sans-serif;font-size:13px;color:var(--sys-text);letter-spacing:1px;}
         .p3call-msgs{flex:1;overflow-y:auto;padding:16px 20px;display:flex;flex-direction:column;gap:10px;-webkit-overflow-scrolling:touch;touch-action:pan-y;min-height:0;}
         .p3call-msgs::-webkit-scrollbar{width:4px;}
         .p3call-msgs::-webkit-scrollbar-thumb{background:rgba(111,173,255,.25);border-radius:12px;}
-        .p3call-right{position:relative;z-index:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px 16px;gap:10px;overflow:hidden;}
-        .p3call-avatar{position:relative;width:100%;flex:1;min-height:0;max-height:320px;border-radius:20px;overflow:hidden;border:1px solid var(--sys-line);background:linear-gradient(170deg,var(--sys-panel-soft),var(--sys-panel));box-shadow:0 16px 36px rgba(0,0,0,.4);transition:box-shadow .15s ease;}
-        .p3call-title{font-family:'Orbitron',sans-serif;font-size:16px;letter-spacing:1px;color:var(--sys-text);text-align:center;}
-        .p3call-sub{font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:1.2px;text-transform:uppercase;color:var(--sys-muted);text-align:center;}
-        .p3call-badge{display:inline-flex;align-items:center;gap:6px;padding:5px 10px;border-radius:999px;border:1px solid var(--sys-line);background:var(--sys-panel-soft);font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:1px;color:var(--sys-muted);text-transform:uppercase;text-align:center;}
-        .p3cam-pip{position:absolute;bottom:10px;right:10px;width:84px;height:84px;border-radius:14px;overflow:hidden;border:1px solid var(--cc,#4a8fc0);box-shadow:0 6px 18px rgba(0,0,0,.5);z-index:6;background:#000;}
-        .p3cam-video{width:100%;height:100%;object-fit:cover;transform:scaleX(-1);display:block;}
-        .p3cam-tag{position:absolute;left:0;right:0;bottom:0;background:rgba(2,6,14,.72);color:var(--cc,#4a8fc0);font-family:'JetBrains Mono',monospace;font-size:8px;letter-spacing:.6px;text-align:center;padding:2px 0;text-transform:uppercase;}
-        .p3call-controls{display:flex;flex-direction:column;gap:6px;margin-top:8px;width:100%;align-items:center;}
 
         .p3chat.live-call .p3inp{border-radius:26px 26px 0 0;}
         .p3chat.live-call .p3ta{min-height:52px;}
@@ -1292,15 +1307,9 @@ export default function PersonaChat() {
           .p3main { font-size: 32px; letter-spacing: 3px; }
           .p3sub { letter-spacing: 3px; }
           .p3voice-hint { width: 100%; }
-          .p3call-wrap{grid-template-columns:1fr;grid-template-rows:1fr auto;}
-          .p3call-right{order:1;flex-direction:column;padding:16px 16px 10px;gap:8px;border-right:none;border-bottom:1px solid var(--sys-line-soft);max-height:none;}
-          .p3call-left{order:2;max-height:30vh;border-right:none;}
-          .p3call-avatar{width:100%;height:auto;min-height:240px;max-height:none;border-radius:16px;}
-          .p3cam-pip{width:56px;height:56px;bottom:6px;right:6px;border-radius:10px;}
-          .p3cam-tag{font-size:6px;padding:1px 0;}
-          .p3call-title{font-size:16px;}
-          .p3call-controls{gap:5px;}
-          .p3call-controls .p3mic-btn,.p3call-controls .p3voice-chip{font-size:9px;padding:8px 6px;}
+          .p3call-round{width:50px;height:50px;font-size:17px;}
+          .p3call-dock{gap:12px;}
+          .p3cam-pip{width:64px;height:88px;bottom:10px;right:10px;}
         }
       `}</style>
 
@@ -1331,6 +1340,7 @@ export default function PersonaChat() {
             ))}
           </select>
         </div>
+        <InstallQR color={char?.color || "#4a8fc0"} />
 
         {deleteConfirm && (
           <div className="p3mo">
@@ -1800,90 +1810,115 @@ export default function PersonaChat() {
                   </>
                 )}
                 {isLiveCallUI && (
-                  <div className="p3call-wrap">
-                    {/* LEFT: chat messages */}
-                    <div className="p3call-left">
-                      <div className="p3call-msgs" ref={messagesContainerRef}>
-                        {messages.map((msg) => (
-                          <div key={msg.id} className={`p3mr ${msg.role}`}>
-                            {msg.role === "assistant" ? <div className="p3mav">{char.avatar}</div> : <div className="p3uav">You</div>}
-                            <div className="p3msg-content">
-                              {msg.image && (
-                                <div style={{
-                                  marginBottom: "6px",
-                                  maxWidth: "200px",
-                                  borderRadius: "12px",
-                                  overflow: "hidden",
-                                  border: "1px solid var(--sys-line)",
-                                  boxShadow: "0 4px 12px rgba(0,0,0,.3)"
-                                }}>
-                                  <img 
-                                    src={msg.image} 
-                                    alt="Message content" 
-                                    style={{width: "100%", display: "block", objectFit: "cover"}}
-                                  />
-                                </div>
-                              )}
-                              <div className={`p3bub ${msg.role}`}>
-                                {msg.role === "assistant" && msg.streaming && msg.id === streamingMsgId ? (
-                                  <StreamingText text={msg.content} onComplete={() => handleStreamComplete(msg.id)} />
+                  <div className="p3call-full">
+                    <div className="p3call-stage">
+                      <Avatar3D
+                        color={char.color}
+                        state={isListening ? "thinking" : streamingMsgId || isSpeaking ? "streaming" : "idle"}
+                        customization={char.customization || {}}
+                        micLevel={micLevel}
+                        expression={detectedExpression}
+                        closeUp
+                        hideLabel
+                      />
+
+                      <div className="p3call-topbar">
+                        <div className="p3call-pill">
+                          <span className="dot" />
+                          {isListening ? "Listening to you" : isTyping || thinkingPhase ? "Analyzing" : isSpeaking ? `${char.name} speaking` : `${char.name} · Live`}
+                        </div>
+                        <button
+                          className="p3call-transcript-toggle"
+                          onClick={() => setShowCallTranscript(true)}
+                          title="View full transcript"
+                        >
+                          💬
+                        </button>
+                      </div>
+
+                      {cameraOn && (
+                        <div className="p3cam-pip">
+                          <video ref={videoRef} className="p3cam-video" playsInline muted autoPlay />
+                          <div className="p3cam-tag">
+                            {faceApiStatus === "loading" ? "loading…" : detectedExpression || "you"}
+                          </div>
+                        </div>
+                      )}
+
+                      {messages.length > 0 && (
+                        <div className="p3call-caption-wrap">
+                          {(() => {
+                            const last = messages[messages.length - 1];
+                            return (
+                              <div className={`p3call-caption ${last.role}`}>
+                                {last.role === "assistant" && last.streaming && last.id === streamingMsgId ? (
+                                  <StreamingText text={last.content} onComplete={() => handleStreamComplete(last.id)} />
                                 ) : (
-                                  msg.content
+                                  last.content
                                 )}
                               </div>
-                            </div>
+                            );
+                          })()}
+                        </div>
+                      )}
+
+                      {showCallTranscript && (
+                        <div className="p3call-transcript">
+                          <div className="p3call-transcript-head">
+                            <span>TRANSCRIPT</span>
+                            <button className="p3call-transcript-toggle" onClick={() => setShowCallTranscript(false)}>✕</button>
                           </div>
-                        ))}
-                        {(isTyping || thinkingPhase) && (
-                          <div className="p3mr assistant">
-                            <div className="p3mav">{char.avatar}</div>
-                            <div className="p3tyb">
-                              {thinkingPhase === "thinking" ? (
-                                <div className="p3thinking"><span className="p3think-text">thinking</span><span className="p3think-dots">...</span></div>
-                              ) : (
-                                <TypingIndicator color={char.color} />
-                              )}
-                            </div>
+                          <div className="p3call-msgs" ref={messagesContainerRef}>
+                            {messages.map((msg) => (
+                              <div key={msg.id} className={`p3mr ${msg.role}`}>
+                                {msg.role === "assistant" ? <div className="p3mav">{char.avatar}</div> : <div className="p3uav">You</div>}
+                                <div className="p3msg-content">
+                                  <div className={`p3bub ${msg.role}`}>
+                                    {msg.role === "assistant" && msg.streaming && msg.id === streamingMsgId ? (
+                                      <StreamingText text={msg.content} onComplete={() => handleStreamComplete(msg.id)} />
+                                    ) : (
+                                      msg.content
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                            <div ref={messagesEndRef} />
                           </div>
-                        )}
-                        <div ref={messagesEndRef} />
-                      </div>
+                        </div>
+                      )}
                     </div>
-                    {/* RIGHT: avatar + status */}
-                    <div className="p3call-right">
-                      <div className="p3call-avatar">
-                        <Avatar3D
-                          color={char.color}
-                          state={isListening ? "thinking" : streamingMsgId || isSpeaking ? "streaming" : "idle"}
-                          customization={char.customization || {}}
-                          micLevel={micLevel}
-                          expression={detectedExpression}
-                        />
-                        {cameraOn && (
-                          <div className="p3cam-pip">
-                            <video ref={videoRef} className="p3cam-video" playsInline muted autoPlay />
-                            <div className="p3cam-tag">
-                              {faceApiStatus === "loading" ? "loading…" : detectedExpression || "you"}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                      <div className="p3call-title">{char.name} Live</div>
-                      <div className="p3call-sub">{isListening ? "Listening to you" : isTyping ? "Analyzing" : isSpeaking ? "Speaking" : "Ready"}</div>
-                      <div className="p3call-badge">{isListening ? "Mic Open" : "Mic Paused"} • {autoSpeak ? "Voice Reply On" : "Voice Reply Off"} • {cameraOn ? "Camera On" : "Camera Off"}</div>
-                      <div className="p3call-controls">
-                        <button className={`p3mic-btn${isListening ? " live" : ""}`} onClick={toggleListening} disabled={!voiceSupported || isTyping} style={{width:"100%"}}>
-                          {isListening ? "◉ LISTENING" : "🎙 MIC"}
-                        </button>
-                        <button className={`p3voice-chip${cameraOn ? " active" : ""}`} onClick={toggleVideoCall} style={{width:"100%"}}>
-                          {cameraOn ? "📷 CAMERA ON" : "📷 CAMERA"}
-                        </button>
-                        <button className="p3voice-chip" onClick={stopSpeaking} disabled={!isSpeaking} style={{width:"100%"}}>STOP SPEAKING</button>
-                        <button className={`p3voice-chip${autoSpeak ? " active" : ""}`} onClick={() => setAutoSpeak(p => !p)} style={{width:"100%"}}>
-                          {autoSpeak ? "VOICE ON" : "VOICE OFF"}
-                        </button>
-                        <button className="p3voice-chip" onClick={() => { setLiveMicMode(false); stopListening(); stopVideoCall(); }} style={{width:"100%",borderColor:"var(--sys-danger)",color:"var(--sys-danger)"}}>EXIT LIVE</button>
-                      </div>
+
+                    <div className="p3call-dock">
+                      <button
+                        className={`p3call-round${autoSpeak ? " active" : ""}`}
+                        onClick={() => { stopSpeaking(); setAutoSpeak((p) => !p); }}
+                        title={autoSpeak ? "Voice reply on — tap to mute" : "Voice reply off — tap to unmute"}
+                      >
+                        {autoSpeak ? "🔊" : "🔇"}
+                      </button>
+                      <button
+                        className={`p3call-round${cameraOn ? " active" : ""}`}
+                        onClick={toggleVideoCall}
+                        title={cameraOn ? "Turn camera off" : "Turn camera on"}
+                      >
+                        📷
+                      </button>
+                      <button
+                        className={`p3call-round${isListening ? " active" : ""}`}
+                        onClick={toggleListening}
+                        disabled={!voiceSupported || isTyping}
+                        title={isListening ? "Stop microphone" : "Start microphone"}
+                      >
+                        🎙
+                      </button>
+                      <button
+                        className="p3call-round end"
+                        onClick={() => { setLiveMicMode(false); stopListening(); stopVideoCall(); setShowCallTranscript(false); }}
+                        title="End call"
+                      >
+                        ✕
+                      </button>
                     </div>
                   </div>
                 )}

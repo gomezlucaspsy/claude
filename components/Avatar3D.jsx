@@ -727,7 +727,7 @@ function GlowRing({ color }) {
   );
 }
 
-export default function Avatar3D({ color = "#4a8fc0", state = "idle", customization = {}, micLevel = 0, expression = null }) {
+export default function Avatar3D({ color = "#4a8fc0", state = "idle", customization = {}, micLevel = 0, expression = null, closeUp = false, hideLabel = false }) {
   const [hasError, setHasError] = useState(false);
   const [isMobileProfile, setIsMobileProfile] = useState(false);
 
@@ -765,7 +765,7 @@ export default function Avatar3D({ color = "#4a8fc0", state = "idle", customizat
   return (
     <div style={{ width: "100%", height: "100%", position: "relative" }}>
       <Canvas
-        camera={{ position: [0, 0.15, 2.2], fov: 30 }}
+        camera={closeUp ? { position: [0, 0.02, 1.5], fov: 26 } : { position: [0, 0.15, 2.2], fov: 30 }}
         dpr={dpr}
         gl={{
           antialias: !isMobileProfile,
@@ -808,7 +808,7 @@ export default function Avatar3D({ color = "#4a8fc0", state = "idle", customizat
         )}
       </Canvas>
 
-      <div style={{
+      {!hideLabel && <div style={{
         position: "absolute",
         bottom: 16,
         left: "50%",
@@ -824,7 +824,7 @@ export default function Avatar3D({ color = "#4a8fc0", state = "idle", customizat
         textShadow: `0 0 10px ${color}66`,
       }}>
         {state === "thinking" ? "thinking..." : state === "streaming" ? "speaking" : "online"}
-      </div>
+      </div>}
     </div>
   );
 }
