@@ -342,19 +342,19 @@ function RealisticBody({ color, state, customization = {}, micLevel = 0, express
           <primitive object={skinMat} attach="material" />
         </mesh>
 
-        {/* Cheekbones */}
-        <mesh position={[-0.15, -0.02, 0.15]}>
-          <sphereGeometry args={[0.065, 16, 16]} />
+        {/* Cheekbones — subtle contour blended into the jaw, not a separate lump */}
+        <mesh position={[-0.12, -0.02, 0.12]}>
+          <sphereGeometry args={[0.045, 16, 16]} />
           <primitive object={skinMat} attach="material" />
         </mesh>
-        <mesh position={[0.15, -0.02, 0.15]}>
-          <sphereGeometry args={[0.065, 16, 16]} />
+        <mesh position={[0.12, -0.02, 0.12]}>
+          <sphereGeometry args={[0.045, 16, 16]} />
           <primitive object={skinMat} attach="material" />
         </mesh>
 
-        {/* Brow ridge */}
-        <mesh position={[0, 0.1, 0.17]} scale={[1.3, 0.4, 0.6]}>
-          <sphereGeometry args={[0.08, 24, 16]} />
+        {/* Brow ridge — kept close to the cranium so it reads as a soft contour, not a visor edge */}
+        <mesh position={[0, 0.09, 0.14]} scale={[1.3, 0.42, 0.55]}>
+          <sphereGeometry args={[0.08, 32, 24]} />
           <primitive object={skinMat} attach="material" />
         </mesh>
 
@@ -428,7 +428,7 @@ function RealisticBody({ color, state, customization = {}, micLevel = 0, express
             <circleGeometry args={[0.009, 24]} />
             <meshStandardMaterial color="#0a0a12" roughness={0.1} />
           </mesh>
-          <mesh position={[0.092, 0.048, 0.218]}>
+          <mesh position={[0.078, 0.048, 0.218]}>
             <circleGeometry args={[0.005, 12]} />
             <meshStandardMaterial color="white" emissive="white" emissiveIntensity={2} />
           </mesh>
@@ -765,7 +765,7 @@ export default function Avatar3D({ color = "#4a8fc0", state = "idle", customizat
   return (
     <div style={{ width: "100%", height: "100%", position: "relative" }}>
       <Canvas
-        camera={closeUp ? { position: [0, 0.02, 1.5], fov: 26 } : { position: [0, 0.15, 2.2], fov: 30 }}
+        camera={closeUp ? { position: [0, 0.25, 1.75], fov: 30 } : { position: [0, 0.15, 2.2], fov: 30 }}
         dpr={dpr}
         gl={{
           antialias: !isMobileProfile,

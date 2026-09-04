@@ -282,6 +282,16 @@ const CymaticsBar = ({ active, color, bars = 14 }) => (
   </div>
 );
 
+// Picks a TTS locale for spoken replies so English text isn't read with a
+// Spanish (es-AR) accent — the voice/accent follows the reply's actual language.
+function detectSpeechLang(text) {
+  if (/[ñáéíóúü¿¡]/i.test(text)) return "es-AR";
+  const sample = text.toLowerCase();
+  const esHits = (sample.match(/\b(que|el|la|los|las|de|en|un|una|es|no|para|con|por|como|más|pero|esto|eso|está|tiene|hola|gracias|muy|bien|qué|cómo|dónde|cuándo|porque|yo|tú|usted)\b/g) || []).length;
+  const enHits = (sample.match(/\b(the|is|and|you|that|this|have|with|for|not|are|was|but|they|what|how|where|when|because|hello|thanks|i'm|it's|don't)\b/g) || []).length;
+  return enHits > esHits ? "en-US" : "es-AR";
+}
+
 export default function PersonaChat() {
   const [characters, setCharacters] = useState(DEFAULT_CHARACTERS);
   const [phase, setPhase] = useState("select");
@@ -586,7 +596,13 @@ export default function PersonaChat() {
     window.speechSynthesis.cancel();
     setIsSpeaking(false);
     const utter = new SpeechSynthesisUtterance(text.slice(0, 900));
-    utter.lang = "es-AR";
+    const lang = detectSpeechLang(text);
+    utter.lang = lang;
+    const voices = window.speechSynthesis.getVoices();
+    const voiceMatch =
+      voices.find((v) => v.lang === lang) ||
+      voices.find((v) => v.lang?.toLowerCase().startsWith(lang.split("-")[0]));
+    if (voiceMatch) utter.voice = voiceMatch;
     utter.rate = 1;
     utter.pitch = 1;
     utter.onstart = () => { setIsSpeaking(true); echoGuardRef.current = true; };
@@ -599,13 +615,14 @@ export default function PersonaChat() {
     const msgText = typeof overrideInput === "string" ? overrideInput : input.trim();
     if ((!msgText && !uploadedImage) || isTyping || !selectedChar) return;
     
-    const userMsg = { 
-      role: "user", 
-      content: msgText, 
-      id: Date.now(), 
+    const liveFrame = !uploadedImage ? captureVideoFrame() : null;
+    const userMsg = {
+      role: "user",
+      content: msgText,
+      id: Date.now(),
       timestamp: Date.now(),
-      image: uploadedImage?.data || null,
-      imageType: uploadedImage?.type || null
+      image: uploadedImage?.data || liveFrame || null,
+      imageType: uploadedImage?.type || (liveFrame ? "image/jpeg" : null)
     };
     
     if (typeof overrideInput !== "string") setInput("");
@@ -889,15 +906,18 @@ export default function PersonaChat() {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" }, audio: false });
       cameraStreamRef.current = stream;
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        await videoRef.current.play().catch(() => {});
-      }
       setCameraOn(true);
       setVoiceError("");
-      setFaceApiStatus("loading");
+    } catch {
+      setVoiceError("Camera access was blocked or unavailable.");
+      stopVideoCall();
+      return;
+    }
 
-      // Load face-api.js + tiny models from CDN on first use only — keeps it simple, no local model files to ship
+    // Face-expression detection is a best-effort extra on top of the camera view —
+    // a failed/slow CDN load here must never tear down the camera stream above.
+    try {
+      setFaceApiStatus("loading");
       if (!faceapiRef.current) {
         faceapiRef.current = await import("face-api.js");
         const MODEL_URL = "https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js@master/weights";
@@ -922,8 +942,8 @@ export default function PersonaChat() {
         }
       }, 600);
     } catch {
-      setVoiceError("Camera access was blocked or unavailable.");
-      stopVideoCall();
+      // Expression detection unavailable — camera view stays on regardless.
+      setFaceApiStatus("error");
     }
   }, [stopVideoCall]);
 
@@ -931,6 +951,32 @@ export default function PersonaChat() {
     if (cameraOn) stopVideoCall();
     else startVideoCall();
   };
+
+  // Grabs the current webcam frame so the AI can actually "see" what's happening
+  // during a live call — sent alongside the next message, same path as an uploaded image.
+  const captureVideoFrame = useCallback(() => {
+    if (!cameraOn || !videoRef.current || videoRef.current.readyState < 2) return null;
+    try {
+      const video = videoRef.current;
+      const canvas = document.createElement("canvas");
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      return canvas.toDataURL("image/jpeg", 0.7);
+    } catch {
+      return null;
+    }
+  }, [cameraOn]);
+
+  // The <video> element only mounts once cameraOn is true, so the stream
+  // must be attached here (after mount) rather than inside startVideoCall.
+  useEffect(() => {
+    if (cameraOn && videoRef.current && cameraStreamRef.current) {
+      videoRef.current.srcObject = cameraStreamRef.current;
+      videoRef.current.play().catch(() => {});
+    }
+  }, [cameraOn]);
 
   useEffect(() => {
     if (!liveMicMode && cameraOn) stopVideoCall();
@@ -1326,18 +1372,20 @@ export default function PersonaChat() {
         </div>
         <div className="p3tl" />
         <div className="p3br" />
-        <div className="p3wm">ORBITAL FREEBASE // SOCIAL LINK OS</div>
-        <div className="p3theme">
-          <span className="p3theme-label">Theme</span>
-          <select className="p3theme-sel" value={themeKey} onChange={(e) => setThemeKey(e.target.value)}>
-            {Object.entries(THEME_PRESETS).map(([key, theme]) => (
-              <option key={key} value={key}>
-                {theme.label}
-              </option>
-            ))}
-          </select>
-        </div>
-        <InstallQR color={char?.color || "#4a8fc0"} />
+        {!isLiveCallUI && <div className="p3wm">ORBITAL FREEBASE // SOCIAL LINK OS</div>}
+        {!isLiveCallUI && (
+          <div className="p3theme">
+            <span className="p3theme-label">Theme</span>
+            <select className="p3theme-sel" value={themeKey} onChange={(e) => setThemeKey(e.target.value)}>
+              {Object.entries(THEME_PRESETS).map(([key, theme]) => (
+                <option key={key} value={key}>
+                  {theme.label}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+        {!isLiveCallUI && <InstallQR color={char?.color || "#4a8fc0"} />}
 
         {deleteConfirm && (
           <div className="p3mo">
