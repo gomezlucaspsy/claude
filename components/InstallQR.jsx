@@ -107,7 +107,7 @@ export default function InstallQR({ color = "#4a8fc0" }) {
 
       <style>{`
         .pfx-install-trigger{
-          position:fixed;top:64px;right:18px;z-index:50;
+          position:fixed;top:calc(64px + env(safe-area-inset-top));right:18px;z-index:50;
           background:rgba(10,20,40,.7);border:1px solid var(--cc,#4a8fc0);
           color:var(--cc,#4a8fc0);font-family:'JetBrains Mono',monospace;
           font-size:10px;letter-spacing:1.4px;padding:8px 14px;border-radius:999px;
@@ -128,8 +128,14 @@ export default function InstallQR({ color = "#4a8fc0" }) {
         .pfx-closebtn{width:100%;background:rgba(16,31,63,.72);border:1px solid rgba(132,194,255,.24);color:rgba(194,228,255,.86);font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:1.2px;padding:10px;cursor:pointer;transition:all .2s;border-radius:999px;}
         .pfx-closebtn:hover{border-color:rgba(156,214,255,.45);}
 
+        /* Below 760px, PersonaChat's header collapses into two full-width bars
+           (theme selector, then the system chip) stacked around top:12px-110px —
+           push the install trigger under both so it isn't hidden behind them. */
+        @media (max-width: 760px){
+          .pfx-install-trigger{top:calc(114px + env(safe-area-inset-top));right:14px;}
+        }
         @media (max-width: 480px){
-          .pfx-install-trigger{top:56px;right:10px;font-size:9px;padding:7px 11px;}
+          .pfx-install-trigger{top:calc(118px + env(safe-area-inset-top));right:10px;font-size:9px;padding:7px 11px;}
         }
       `}</style>
     </>
