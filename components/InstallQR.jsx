@@ -80,14 +80,14 @@ export default function InstallQR({ color = "#4a8fc0" }) {
             style={{ "--cc": color }}
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="pfx-mt">[ INSTALL PERSONAFORGE ]</div>
+            <div className="pfx-mt">[ INSTALL ROBOTFORGE ]</div>
             <p className="pfx-hint">
               Scan with your phone's camera to open this app, then add it to
               your home screen — offline access, faster loads, native feel.
             </p>
             <div className="pfx-imgwrap">
               {qrUrl ? (
-                <img src={qrUrl} alt="QR code to install PersonaForge" />
+                <img src={qrUrl} alt="QR code to install RobotForge" />
               ) : (
                 <div className="pfx-loading">Generating QR…</div>
               )}

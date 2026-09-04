@@ -1,7 +1,7 @@
 {
-  "name": "Persona Dialogue System",
-  "short_name": "Persona Chat",
-  "description": "Character AI chat experience inspired by Persona.",
+  "name": "RobotForge Dialogue System",
+  "short_name": "RobotForge Chat",
+  "description": "Character AI chat experience with fully customizable companions.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#030714",

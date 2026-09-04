@@ -49,7 +49,7 @@ const fetchWithTimeout = async (url, options = {}, timeoutMs = 10000) => {
       ...options,
       signal: controller.signal,
       headers: {
-        "User-Agent": "persona-chat-link-analyzer",
+        "User-Agent": "robotforge-link-analyzer",
         Accept: "application/json, text/plain, text/html;q=0.9,*/*;q=0.8",
         ...(options.headers || {}),
       },

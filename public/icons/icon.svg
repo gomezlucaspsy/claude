@@ -48,7 +48,7 @@
   <rect x="176" y="288" width="160" height="28" rx="6"
         fill="rgba(8,28,60,0.7)" stroke="#8fd7ff" stroke-width="1" opacity="0.7"/>
   <text x="256" y="307" text-anchor="middle" font-family="monospace" font-size="13"
-        fill="#8fd7ff" letter-spacing="2">PERSONA</text>
+        fill="#8fd7ff" letter-spacing="1">ROBOTFORGE</text>
 
   <!-- Corner accents -->
   <circle cx="256" cy="420" r="16" fill="none" stroke="#5ec2ff" stroke-width="1.5" opacity="0.4"/>

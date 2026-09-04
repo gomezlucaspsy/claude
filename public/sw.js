@@ -1,4 +1,4 @@
-const CACHE_NAME = "persona-chat-v1";
+const CACHE_NAME = "robotforge-chat-v1";
 const STATIC_ASSETS = ["/", "/manifest.json", "/icons/icon.svg", "/icons/maskable-icon.svg"];
 
 // Install: cache static shell
