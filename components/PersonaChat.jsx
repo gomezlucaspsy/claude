@@ -575,8 +575,6 @@ export default function PersonaChat() {
     setMessages((prev) => prev.map((m) => (m.id === msgId ? { ...m, streaming: false } : m)));
   }, []);
 
-  const isDestapadora = selectedChar?.id === "la-destapadora";
-
   const stopSpeaking = useCallback(() => {
     if (typeof window === "undefined" || !window.speechSynthesis) return;
     window.speechSynthesis.cancel();
@@ -584,7 +582,7 @@ export default function PersonaChat() {
   }, []);
 
   const speakAssistant = useCallback((text) => {
-    if (!isDestapadora || !autoSpeak || typeof window === "undefined" || !window.speechSynthesis || !text) return;
+    if (!autoSpeak || typeof window === "undefined" || !window.speechSynthesis || !text) return;
     window.speechSynthesis.cancel();
     setIsSpeaking(false);
     const utter = new SpeechSynthesisUtterance(text.slice(0, 900));
@@ -595,7 +593,7 @@ export default function PersonaChat() {
     utter.onend = () => { setIsSpeaking(false); setTimeout(() => { echoGuardRef.current = false; }, 1500); };
     utter.onerror = () => { setIsSpeaking(false); setTimeout(() => { echoGuardRef.current = false; }, 1500); };
     window.speechSynthesis.speak(utter);
-  }, [autoSpeak, isDestapadora]);
+  }, [autoSpeak]);
 
   const sendMessage = async (overrideInput) => {
     const msgText = typeof overrideInput === "string" ? overrideInput : input.trim();
@@ -706,7 +704,6 @@ export default function PersonaChat() {
   };
 
   const startListening = () => {
-    if (!isDestapadora) return;
     if (typeof window === "undefined") return;
     if (isTyping && !liveMicMode) {
       setVoiceError("Wait for the current answer before using live mic.");
@@ -813,7 +810,7 @@ export default function PersonaChat() {
     else startListening();
   };
 
-  const isLiveCallUI = isDestapadora && liveMicMode;
+  const isLiveCallUI = liveMicMode;
 
   // Live mic volume — feeds the avatar's real-time "listening" reactivity
   const stopMicLevel = useCallback(() => {
@@ -972,18 +969,18 @@ export default function PersonaChat() {
   };
 
   useEffect(() => {
-    if (!isDestapadora || !liveMicMode) return;
+    if (!liveMicMode) return;
     setAutoSpeak(true);
-  }, [isDestapadora, liveMicMode]);
+  }, [liveMicMode]);
 
+  // Switching characters mid-call: stop the previous character's mic/speech
   useEffect(() => {
-    if (isDestapadora) return;
     stopListening();
     if (typeof window !== "undefined" && window.speechSynthesis) {
       window.speechSynthesis.cancel();
     }
     setIsSpeaking(false);
-  }, [isDestapadora]);
+  }, [selectedChar?.id]);
 
   useEffect(() => {
     if (autoSpeak) return;
@@ -1965,50 +1962,46 @@ export default function PersonaChat() {
                       </button>
                     </div>
                   )}
-                  {char.id === "la-destapadora" && (
-                    <>
-                      <div className="p3voice-row">
-                        <button
-                          className={`p3mic-btn${isListening ? " live" : ""}`}
-                          onClick={toggleListening}
-                          disabled={!voiceSupported || isTyping}
-                          title={isListening ? "Stop microphone" : "Start microphone"}
-                        >
-                          {isListening ? "◉ LISTENING" : "🎙 START MIC"}
-                        </button>
-                        <button
-                          className={`p3voice-chip${liveMicMode ? " active" : ""}`}
-                          onClick={() => setLiveMicMode((prev) => !prev)}
-                          disabled={!voiceSupported || isTyping}
-                          title="Auto-send final speech segments"
-                        >
-                          {liveMicMode ? "EXIT LIVE" : "LIVE CALL"}
-                        </button>
-                        <button
-                          className={`p3voice-chip${autoSpeak ? " active" : ""}`}
-                          onClick={() => setAutoSpeak((prev) => !prev)}
-                          disabled={!voiceSupported}
-                          title="Read replies out loud"
-                        >
-                          VOICE REPLY
-                        </button>
-                        <button
-                          className="p3voice-chip"
-                          onClick={stopSpeaking}
-                          disabled={!isSpeaking}
-                          title="Stop spoken playback"
-                        >
-                          STOP SPEAKING
-                        </button>
-                        <div className="p3voice-hint">
-                          {!voiceSupported
-                            ? "Mic needs HTTPS + Chrome/Edge speech recognition"
-                            : "Speak naturally, edit text if needed, then press SEND"}
-                        </div>
-                      </div>
-                      {voiceError && <div className="p3voice-error">{voiceError}</div>}
-                    </>
-                  )}
+                  <div className="p3voice-row">
+                    <button
+                      className={`p3mic-btn${isListening ? " live" : ""}`}
+                      onClick={toggleListening}
+                      disabled={!voiceSupported || isTyping}
+                      title={isListening ? "Stop microphone" : "Start microphone"}
+                    >
+                      {isListening ? "◉ LISTENING" : "🎙 START MIC"}
+                    </button>
+                    <button
+                      className={`p3voice-chip${liveMicMode ? " active" : ""}`}
+                      onClick={() => setLiveMicMode((prev) => !prev)}
+                      disabled={!voiceSupported || isTyping}
+                      title="Auto-send final speech segments"
+                    >
+                      {liveMicMode ? "EXIT LIVE" : "LIVE CALL"}
+                    </button>
+                    <button
+                      className={`p3voice-chip${autoSpeak ? " active" : ""}`}
+                      onClick={() => setAutoSpeak((prev) => !prev)}
+                      disabled={!voiceSupported}
+                      title="Read replies out loud"
+                    >
+                      VOICE REPLY
+                    </button>
+                    <button
+                      className="p3voice-chip"
+                      onClick={stopSpeaking}
+                      disabled={!isSpeaking}
+                      title="Stop spoken playback"
+                    >
+                      STOP SPEAKING
+                    </button>
+                    <div className="p3voice-hint">
+                      {!voiceSupported
+                        ? "Mic needs HTTPS + Chrome/Edge speech recognition"
+                        : "Speak naturally, edit text if needed, then press SEND"}
+                    </div>
+                  </div>
+                  {voiceError && <div className="p3voice-error">{voiceError}</div>}
                   {/* Image Upload - Available to all characters */}
                   <div style={{marginBottom: "12px"}}>
                     <button
