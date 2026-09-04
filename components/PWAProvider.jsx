@@ -20,11 +20,30 @@ export default function PWAProvider() {
   const [platform, setPlatform]             = useState(null); // "android" | "ios"
 
   useEffect(() => {
-    // 1. Register service worker
+    // 1. Register service worker, and make sure updates actually reach an already-open
+    // app instead of sitting cached until the user reinstalls. Chrome only checks for a
+    // new sw.js on its own schedule (roughly once a day) and, once one is installed, the
+    // page that's already loaded keeps running the old JS until it reloads — sw.js calls
+    // skipWaiting()/clients.claim() so the new worker takes over immediately, but nothing
+    // was reloading the page to pick up the new bundle. Force a check on load and every
+    // time the app is foregrounded, then reload once a new worker actually takes control.
     if ("serviceWorker" in navigator) {
       navigator.serviceWorker
         .register("/sw.js", { scope: "/" })
+        .then((registration) => {
+          registration.update().catch(() => {});
+          document.addEventListener("visibilitychange", () => {
+            if (document.visibilityState === "visible") registration.update().catch(() => {});
+          });
+        })
         .catch((err) => console.error("SW registration failed:", err));
+
+      let reloadedForUpdate = false;
+      navigator.serviceWorker.addEventListener("controllerchange", () => {
+        if (reloadedForUpdate) return;
+        reloadedForUpdate = true;
+        window.location.reload();
+      });
     }
 
     // 2. Already running as installed PWA → nothing to do
