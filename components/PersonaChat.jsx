@@ -6,6 +6,7 @@ import { mcGetTree, mcApplyAction } from "./FileExplorer";
 
 const Avatar3D = dynamic(() => import("./Avatar3D"), { ssr: false });
 const FileExplorer = dynamic(() => import("./FileExplorer"), { ssr: false });
+const InstallQR = dynamic(() => import("./InstallQR"), { ssr: false });
 
 
 const ARCANA_OPTIONS = [
@@ -314,6 +315,9 @@ export default function PersonaChat() {
   const [autoSpeak, setAutoSpeak] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [voiceError, setVoiceError] = useState("");
+  const [cameraOn, setCameraOn] = useState(false);
+  const [faceApiStatus, setFaceApiStatus] = useState("idle"); // idle | loading | ready
+  const [detectedEmotion, setDetectedEmotion] = useState(null);
   const thinkTimerRef = useRef(null);
   const recognitionRef = useRef(null);
   const lastVoiceSendRef = useRef(0);
@@ -321,6 +325,10 @@ export default function PersonaChat() {
   const echoGuardRef = useRef(false); // true while AI speaks + 1.5s cooldown after
   const messagesContainerRef = useRef(null);
   const messagesEndRef = useRef(null);
+  const videoRef = useRef(null);
+  const cameraStreamRef = useRef(null);
+  const faceDetectIntervalRef = useRef(null);
+  const faceapiRef = useRef(null);
   const inputRef = useRef(null);
   const chatRef = useRef(null);
   const chatHeaderRef = useRef(null);
@@ -801,6 +809,80 @@ export default function PersonaChat() {
 
   const isLiveCallUI = isDestapadora && liveMicMode;
 
+  // Video call — camera preview + lightweight face-api.js expression detection
+  const stopVideoCall = useCallback(() => {
+    if (faceDetectIntervalRef.current) {
+      clearInterval(faceDetectIntervalRef.current);
+      faceDetectIntervalRef.current = null;
+    }
+    if (cameraStreamRef.current) {
+      cameraStreamRef.current.getTracks().forEach((t) => t.stop());
+      cameraStreamRef.current = null;
+    }
+    if (videoRef.current) videoRef.current.srcObject = null;
+    setCameraOn(false);
+    setDetectedEmotion(null);
+    setFaceApiStatus("idle");
+  }, []);
+
+  const startVideoCall = useCallback(async () => {
+    if (typeof window === "undefined" || !navigator.mediaDevices?.getUserMedia) {
+      setVoiceError("Camera requires HTTPS and a browser with camera support.");
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" }, audio: false });
+      cameraStreamRef.current = stream;
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        await videoRef.current.play().catch(() => {});
+      }
+      setCameraOn(true);
+      setVoiceError("");
+      setFaceApiStatus("loading");
+
+      // Load face-api.js + tiny models from CDN on first use only — keeps it simple, no local model files to ship
+      if (!faceapiRef.current) {
+        faceapiRef.current = await import("face-api.js");
+        const MODEL_URL = "https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js@master/weights";
+        await Promise.all([
+          faceapiRef.current.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
+          faceapiRef.current.nets.faceExpressionNet.loadFromUri(MODEL_URL),
+        ]);
+      }
+      const faceapi = faceapiRef.current;
+      setFaceApiStatus("ready");
+
+      faceDetectIntervalRef.current = setInterval(async () => {
+        if (!videoRef.current || videoRef.current.readyState < 2) return;
+        try {
+          const result = await faceapi
+            .detectSingleFace(videoRef.current, new faceapi.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.5 }))
+            .withFaceExpressions();
+          const top = result?.expressions && Object.entries(result.expressions).sort((a, b) => b[1] - a[1])[0];
+          setDetectedEmotion(top ? top[0] : null);
+        } catch {
+          // transient detection failure — skip this tick
+        }
+      }, 700);
+    } catch (err) {
+      setVoiceError("Camera access was blocked or unavailable.");
+      stopVideoCall();
+    }
+  }, [stopVideoCall]);
+
+  const toggleVideoCall = () => {
+    if (cameraOn) stopVideoCall();
+    else startVideoCall();
+  };
+
+  useEffect(() => {
+    if (!liveMicMode && cameraOn) stopVideoCall();
+  }, [liveMicMode, cameraOn, stopVideoCall]);
+
+  useEffect(() => {
+    return () => stopVideoCall();
+  }, [stopVideoCall]);
 
   // Image upload functions
 
@@ -1112,7 +1194,10 @@ export default function PersonaChat() {
         .p3call-msgs::-webkit-scrollbar{width:4px;}
         .p3call-msgs::-webkit-scrollbar-thumb{background:rgba(111,173,255,.25);border-radius:12px;}
         .p3call-right{position:relative;z-index:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px 16px;gap:10px;overflow:hidden;}
-        .p3call-avatar{width:100%;flex:1;min-height:0;max-height:320px;border-radius:20px;overflow:hidden;border:1px solid var(--sys-line);background:linear-gradient(170deg,var(--sys-panel-soft),var(--sys-panel));box-shadow:0 16px 36px rgba(0,0,0,.4);}
+        .p3call-avatar{position:relative;width:100%;flex:1;min-height:0;max-height:320px;border-radius:20px;overflow:hidden;border:1px solid var(--sys-line);background:linear-gradient(170deg,var(--sys-panel-soft),var(--sys-panel));box-shadow:0 16px 36px rgba(0,0,0,.4);}
+        .p3cam-pip{position:absolute;bottom:10px;right:10px;width:84px;height:84px;border-radius:14px;overflow:hidden;border:1px solid var(--cc,#4a8fc0);box-shadow:0 6px 18px rgba(0,0,0,.5);z-index:6;background:#000;}
+        .p3cam-video{width:100%;height:100%;object-fit:cover;transform:scaleX(-1);display:block;}
+        .p3cam-tag{position:absolute;left:0;right:0;bottom:0;background:rgba(2,6,14,.72);color:var(--cc,#4a8fc0);font-family:'JetBrains Mono',monospace;font-size:8px;letter-spacing:.6px;text-align:center;padding:2px 0;text-transform:uppercase;}
         .p3call-title{font-family:'Orbitron',sans-serif;font-size:16px;letter-spacing:1px;color:var(--sys-text);text-align:center;}
         .p3call-sub{font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:1.2px;text-transform:uppercase;color:var(--sys-muted);text-align:center;}
         .p3call-badge{display:inline-flex;align-items:center;gap:6px;padding:5px 10px;border-radius:999px;border:1px solid var(--sys-line);background:var(--sys-panel-soft);font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:1px;color:var(--sys-muted);text-transform:uppercase;text-align:center;}
@@ -1147,6 +1232,8 @@ export default function PersonaChat() {
           .p3call-wrap{grid-template-columns:1fr;grid-template-rows:1fr auto;}
           .p3call-right{flex-direction:row;padding:12px 16px;gap:12px;justify-content:flex-start;border-right:none;border-top:1px solid var(--sys-line-soft);max-height:140px;}
           .p3call-avatar{width:100px;height:100px;max-height:100px;border-radius:14px;flex:0 0 100px;}
+          .p3cam-pip{width:38px;height:38px;bottom:4px;right:4px;border-radius:8px;}
+          .p3cam-tag{font-size:6px;padding:1px 0;}
           .p3call-title{font-size:14px;text-align:left;}
           .p3call-sub{text-align:left;}
           .p3call-badge{text-align:left;}
@@ -1180,6 +1267,7 @@ export default function PersonaChat() {
             ))}
           </select>
         </div>
+        <InstallQR color={char?.color || "#4a8fc0"} />
 
         {deleteConfirm && (
           <div className="p3mo">
@@ -1704,19 +1792,30 @@ export default function PersonaChat() {
                           state={isListening ? "thinking" : streamingMsgId || isSpeaking ? "streaming" : "idle"}
                           customization={char.customization || {}}
                         />
+                        {cameraOn && (
+                          <div className="p3cam-pip">
+                            <video ref={videoRef} className="p3cam-video" playsInline muted autoPlay />
+                            <div className="p3cam-tag">
+                              {faceApiStatus === "loading" ? "loading…" : detectedEmotion || "you"}
+                            </div>
+                          </div>
+                        )}
                       </div>
                       <div className="p3call-title">{char.name} Live</div>
                       <div className="p3call-sub">{isListening ? "Listening to you" : isTyping ? "Analyzing" : isSpeaking ? "Speaking" : "Ready"}</div>
-                      <div className="p3call-badge">{isListening ? "Mic Open" : "Mic Paused"} • {autoSpeak ? "Voice Reply On" : "Voice Reply Off"}</div>
+                      <div className="p3call-badge">{isListening ? "Mic Open" : "Mic Paused"} • {autoSpeak ? "Voice Reply On" : "Voice Reply Off"} • {cameraOn ? "Camera On" : "Camera Off"}</div>
                       <div style={{display:"flex",flexDirection:"column",gap:6,marginTop:8,width:"100%",alignItems:"center"}}>
                         <button className={`p3mic-btn${isListening ? " live" : ""}`} onClick={toggleListening} disabled={!voiceSupported || isTyping} style={{width:"100%"}}>
                           {isListening ? "◉ LISTENING" : "🎙 MIC"}
+                        </button>
+                        <button className={`p3voice-chip${cameraOn ? " active" : ""}`} onClick={toggleVideoCall} style={{width:"100%"}}>
+                          {cameraOn ? "📷 CAMERA ON" : "📷 CAMERA"}
                         </button>
                         <button className="p3voice-chip" onClick={stopSpeaking} disabled={!isSpeaking} style={{width:"100%"}}>STOP SPEAKING</button>
                         <button className={`p3voice-chip${autoSpeak ? " active" : ""}`} onClick={() => setAutoSpeak(p => !p)} style={{width:"100%"}}>
                           {autoSpeak ? "VOICE ON" : "VOICE OFF"}
                         </button>
-                        <button className="p3voice-chip" onClick={() => { setLiveMicMode(false); stopListening(); }} style={{width:"100%",borderColor:"var(--sys-danger)",color:"var(--sys-danger)"}}>EXIT LIVE</button>
+                        <button className="p3voice-chip" onClick={() => { setLiveMicMode(false); stopListening(); stopVideoCall(); }} style={{width:"100%",borderColor:"var(--sys-danger)",color:"var(--sys-danger)"}}>EXIT LIVE</button>
                       </div>
                     </div>
                   </div>
