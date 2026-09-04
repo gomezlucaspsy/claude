@@ -765,7 +765,7 @@ export default function Avatar3D({ color = "#4a8fc0", state = "idle", customizat
   return (
     <div style={{ width: "100%", height: "100%", position: "relative" }}>
       <Canvas
-        camera={closeUp ? { position: [0, 0.25, 1.75], fov: 30 } : { position: [0, 0.15, 2.2], fov: 30 }}
+        camera={closeUp ? { position: [0, 0.3, 2.3], fov: 30 } : { position: [0, 0.15, 2.2], fov: 30 }}
         dpr={dpr}
         gl={{
           antialias: !isMobileProfile,
