@@ -12,8 +12,10 @@
     "generate-icons": "node scripts/generate-icons.mjs"
   },
   "dependencies": {
+    "@huggingface/transformers": "^4.2.0",
     "@react-three/drei": "^10.7.7",
     "@react-three/fiber": "^9.5.0",
+    "@ricky0123/vad-web": "^0.0.30",
     "@upstash/redis": "^1.36.3",
     "face-api.js": "^0.22.2",
     "next": "^15.5.0",

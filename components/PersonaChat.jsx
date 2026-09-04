@@ -333,7 +333,6 @@ export default function PersonaChat() {
   const thinkTimerRef = useRef(null);
   const recognitionRef = useRef(null);
   const lastVoiceSendRef = useRef(0);
-  const startListeningRef = useRef(null);
   const echoGuardRef = useRef(false); // true while AI speaks + 1.5s cooldown after
   const messagesContainerRef = useRef(null);
   const messagesEndRef = useRef(null);
@@ -341,11 +340,8 @@ export default function PersonaChat() {
   const cameraStreamRef = useRef(null);
   const faceDetectIntervalRef = useRef(null);
   const faceapiRef = useRef(null);
-  const micStreamRef = useRef(null);
-  const micAudioCtxRef = useRef(null);
-  const micAnalyserRef = useRef(null);
-  const micLevelRafRef = useRef(null);
-  const micStopTimeoutRef = useRef(null);
+  const vadRef = useRef(null); // active Silero VAD instance for the live call, owns its own mic stream
+  const asrPipelineRef = useRef(null); // cached local Whisper pipeline, loaded once per session
   const intentionalStopRef = useRef(false);
   const inputRef = useRef(null);
   const chatRef = useRef(null);
@@ -714,13 +710,101 @@ export default function PersonaChat() {
 
   const stopListening = () => {
     intentionalStopRef.current = true;
+    if (vadRef.current) {
+      const vad = vadRef.current;
+      vadRef.current = null;
+      vad.pause().catch(() => {});
+    }
     if (recognitionRef.current) {
       try {
         recognitionRef.current.stop();
       } catch {}
       recognitionRef.current = null;
     }
+    setMicLevel(0);
     setIsListening(false);
+  };
+
+  // Live call voice loop. A real voice-activity-detection model (Silero VAD, running
+  // locally in the browser via @ricky0123/vad-web — the same approach real voice-AI
+  // products use) decides when you start/stop talking, instead of relying on the
+  // browser's own SpeechRecognition and its silence auto-timeout — that timeout, and
+  // the restart loop needed to recover from it, is what made the Android mic cut in
+  // and out. The mic stream is requested once for the whole call and VAD owns it for
+  // the duration — nothing here re-acquires it mid-call. Transcription runs locally
+  // too (Whisper via @huggingface/transformers) straight off the raw samples VAD
+  // captured — no echo cancellation/noise suppression/auto-gain, since this audio is
+  // only ever read by the model, not played back through a speaker.
+  const startLiveVoice = async () => {
+    if (typeof window === "undefined" || !navigator.mediaDevices?.getUserMedia) return;
+    setVoiceError("");
+    intentionalStopRef.current = false;
+
+    const STOP_COMMANDS = /\b(stop|para|pará|callate|callá|silencio|basta|enough|quiet)\b/i;
+
+    try {
+      if (!asrPipelineRef.current) {
+        setVoiceError("Loading offline voice recognition (first time only)…");
+        const { pipeline } = await import("@huggingface/transformers");
+        const device = navigator.gpu ? "webgpu" : "wasm";
+        asrPipelineRef.current = await pipeline("automatic-speech-recognition", "Xenova/whisper-tiny", { device });
+      }
+      if (intentionalStopRef.current) {
+        setVoiceError("");
+        return; // user backed out while the model was loading
+      }
+      const asr = asrPipelineRef.current;
+
+      const { MicVAD } = await import("@ricky0123/vad-web");
+      const vad = await MicVAD.new({
+        getStream: () =>
+          navigator.mediaDevices.getUserMedia({
+            audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
+          }),
+        onFrameProcessed: (_probabilities, frame) => {
+          let sum = 0;
+          for (let i = 0; i < frame.length; i++) sum += Math.abs(frame[i]);
+          const avg = (sum / frame.length) * 3;
+          setMicLevel((prev) => prev + (avg - prev) * 0.35);
+        },
+        onSpeechStart: () => {
+          // Barge-in: the instant real speech is detected, cut the AI off — same
+          // beat real Live products interrupt on.
+          if (window.speechSynthesis?.speaking) {
+            window.speechSynthesis.cancel();
+            setIsSpeaking(false);
+          }
+        },
+        onSpeechEnd: async (audio) => {
+          try {
+            const result = await asr(audio, { language: "spanish", task: "transcribe" });
+            const text = (result?.text || "").trim();
+            if (!text) return;
+            const words = text.split(/\s+/).filter(Boolean);
+            if (STOP_COMMANDS.test(text) && words.length <= 3) return; // already interrupted in onSpeechStart
+            const now = Date.now();
+            if (now - lastVoiceSendRef.current < 700) return; // guard against a double-fire
+            lastVoiceSendRef.current = now;
+            sendMessage(text);
+          } catch {
+            // transcription failed for this segment — drop it, mic stays live for the next one
+          }
+        },
+      });
+
+      if (intentionalStopRef.current) {
+        vad.pause().catch(() => {});
+        setVoiceError("");
+        return;
+      }
+      vadRef.current = vad;
+      vad.start();
+      setVoiceError("");
+      setIsListening(true);
+    } catch {
+      setVoiceError("Microphone access was blocked or unavailable.");
+      setIsListening(false);
+    }
   };
 
   const startListening = () => {
@@ -730,16 +814,15 @@ export default function PersonaChat() {
       return;
     }
 
+    if (liveMicMode) {
+      startLiveVoice();
+      return;
+    }
+
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognition || !window.isSecureContext) {
       setVoiceError("Microphone requires HTTPS and a browser with Speech Recognition.");
       return;
-    }
-
-    // If AI is speaking, interrupt immediately when mic starts
-    if (liveMicMode && window.speechSynthesis && window.speechSynthesis.speaking) {
-      window.speechSynthesis.cancel();
-      setIsSpeaking(false);
     }
 
     let finalBuffer = "";
@@ -750,7 +833,6 @@ export default function PersonaChat() {
     recognition.maxAlternatives = 1;
 
     const STOP_COMMANDS = /\b(stop|para|pará|callate|callá|silencio|basta|enough|quiet)\b/i;
-    const wordCount = (s) => s.trim().split(/\s+/).filter(Boolean).length;
 
     recognition.onresult = (event) => {
       let interim = "";
@@ -772,28 +854,8 @@ export default function PersonaChat() {
           }
 
           finalBuffer = `${finalBuffer} ${transcript}`.trim();
-          if (liveMicMode) {
-            const now = Date.now();
-            // Require 2+ words AND 10+ chars to avoid keyboard noise triggering a send
-            if (wordCount(transcript) >= 2 && transcript.length >= 10 && now - lastVoiceSendRef.current > 1400) {
-              lastVoiceSendRef.current = now;
-              sendMessage(transcript);
-              finalBuffer = "";
-              setInput((prev) => {
-                // Only clear if the current input is the voice transcript, not manually typed text
-                return prev === transcript || prev.endsWith(transcript) ? "" : prev;
-              });
-            }
-          }
         } else {
           interim = `${interim} ${transcript}`.trim();
-          // Only interrupt AI speech if stop command OR 2+ real words detected in interim
-          if (liveMicMode && window.speechSynthesis && window.speechSynthesis.speaking) {
-            if (STOP_COMMANDS.test(interim) || wordCount(interim) >= 2) {
-              window.speechSynthesis.cancel();
-              setIsSpeaking(false);
-            }
-          }
         }
       }
       const composed = `${finalBuffer} ${interim}`.trim();
@@ -803,7 +865,6 @@ export default function PersonaChat() {
     recognition.onerror = (event) => {
       if (event.error === "aborted") return;
       if (event.error === "not-allowed" || event.error === "service-not-allowed") {
-        intentionalStopRef.current = true; // permission truly denied — don't loop retrying
         setVoiceError(
           "Mic permission blocked. On Android Chrome: tap the lock icon in the address bar > Permissions > Microphone > Allow, then reload the page."
         );
@@ -816,39 +877,15 @@ export default function PersonaChat() {
     recognition.onend = () => {
       recognitionRef.current = null;
       setIsListening(false);
-      if (!liveMicMode) {
-        const trimmed = finalBuffer.trim();
-        if (trimmed) setInput(trimmed);
-        return;
-      }
-      // Android Chrome's SpeechRecognition silently ends itself after periods of
-      // silence, screen/tab visibility changes, or brief mic suspension — without
-      // this restart the "live call" mic just goes dead with no error shown.
-      if (!intentionalStopRef.current) {
-        setTimeout(() => {
-          if (!intentionalStopRef.current) startListeningRef.current?.();
-        }, 300);
-      }
+      const trimmed = finalBuffer.trim();
+      if (trimmed) setInput(trimmed);
     };
 
     setVoiceError("");
-    intentionalStopRef.current = false;
     recognitionRef.current = recognition;
-    try {
-      recognition.start();
-      setIsListening(true);
-    } catch {
-      // Android sometimes throws "already started" if the previous instance hasn't
-      // fully torn down yet — retry shortly instead of leaving the mic dead.
-      recognitionRef.current = null;
-      if (liveMicMode && !intentionalStopRef.current) {
-        setTimeout(() => {
-          if (!intentionalStopRef.current) startListeningRef.current?.();
-        }, 300);
-      }
-    }
+    recognition.start();
+    setIsListening(true);
   };
-  startListeningRef.current = startListening;
 
   const toggleListening = () => {
     if (isListening) stopListening();
@@ -856,81 +893,6 @@ export default function PersonaChat() {
   };
 
   const isLiveCallUI = liveMicMode;
-
-  // Live mic volume — feeds the avatar's real-time "listening" reactivity
-  const stopMicLevel = useCallback(() => {
-    if (micLevelRafRef.current) {
-      cancelAnimationFrame(micLevelRafRef.current);
-      micLevelRafRef.current = null;
-    }
-    if (micStreamRef.current) {
-      micStreamRef.current.getTracks().forEach((t) => t.stop());
-      micStreamRef.current = null;
-    }
-    if (micAudioCtxRef.current) {
-      micAudioCtxRef.current.close().catch(() => {});
-      micAudioCtxRef.current = null;
-    }
-    micAnalyserRef.current = null;
-    setMicLevel(0);
-  }, []);
-
-  const startMicLevel = useCallback(async () => {
-    if (typeof window === "undefined" || !navigator.mediaDevices?.getUserMedia) return;
-    if (micStreamRef.current) return; // already running — avoid re-grabbing the mic
-    try {
-      // Raw, unprocessed audio: Android Chrome's SpeechRecognition opens its own mic
-      // capture with echo cancellation on. Requesting the same processed mode here
-      // makes the two capture sessions fight over the single hardware AEC unit, and
-      // Android resolves that by killing one side — this is what read as the mic
-      // randomly cutting out. Asking for raw audio keeps this stream off that unit.
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
-      });
-      micStreamRef.current = stream;
-      const AudioCtx = window.AudioContext || window.webkitAudioContext;
-      const ctx = new AudioCtx();
-      micAudioCtxRef.current = ctx;
-      const source = ctx.createMediaStreamSource(stream);
-      const analyser = ctx.createAnalyser();
-      analyser.fftSize = 256;
-      analyser.smoothingTimeConstant = 0.6;
-      source.connect(analyser);
-      micAnalyserRef.current = analyser;
-      const data = new Uint8Array(analyser.frequencyBinCount);
-      const tick = () => {
-        if (!micAnalyserRef.current) return;
-        micAnalyserRef.current.getByteFrequencyData(data);
-        let sum = 0;
-        for (let i = 0; i < data.length; i++) sum += data[i];
-        const avg = sum / data.length / 255;
-        setMicLevel((prev) => prev + (avg - prev) * 0.35);
-        micLevelRafRef.current = requestAnimationFrame(tick);
-      };
-      tick();
-    } catch {
-      // mic access denied/unavailable — avatar just skips the extra reactivity
-    }
-  }, []);
-
-  useEffect(() => {
-    if (isListening) {
-      // Cancel any pending teardown from a moment ago — on Android, SpeechRecognition
-      // silently ends and restarts itself constantly, flipping isListening off/on within
-      // ~300ms. Without this guard, that flicker tore down and re-requested the raw mic
-      // stream every cycle, which reads to the user as the mic turning on and off.
-      if (micStopTimeoutRef.current) {
-        clearTimeout(micStopTimeoutRef.current);
-        micStopTimeoutRef.current = null;
-      }
-      startMicLevel();
-    } else {
-      micStopTimeoutRef.current = setTimeout(() => {
-        micStopTimeoutRef.current = null;
-        stopMicLevel();
-      }, 600);
-    }
-  }, [isListening, startMicLevel, stopMicLevel]);
 
   // Live camera — self-view + face-api.js expression detection mirrored onto the avatar
   const stopVideoCall = useCallback(() => {
@@ -1038,14 +1000,15 @@ export default function PersonaChat() {
 
   useEffect(() => {
     return () => {
-      if (micStopTimeoutRef.current) {
-        clearTimeout(micStopTimeoutRef.current);
-        micStopTimeoutRef.current = null;
+      intentionalStopRef.current = true;
+      if (vadRef.current) {
+        const vad = vadRef.current;
+        vadRef.current = null;
+        vad.pause().catch(() => {});
       }
       stopVideoCall();
-      stopMicLevel();
     };
-  }, [stopVideoCall, stopMicLevel]);
+  }, [stopVideoCall]);
 
   // Image upload functions
 
