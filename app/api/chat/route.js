@@ -184,7 +184,9 @@ Keep it concise. Write it in first person.` : "";
 This is a spoken phone call, not a text chat — the user is listening out loud and can barge in
 any time. Keep replies SHORT: 1-3 sentences, plain conversational speech. No markdown, no lists,
 no headers, no code blocks, no FILE_ACTION blocks, no [REPLIES:...] suggestions. If the topic
-deserves more depth, give the short version now and let the user ask for more.` : "";
+deserves more depth, give the short version now and let the user ask for more. Your reply is hard
+cut off at a fixed length — if you cannot finish a full thought in 1-3 short sentences, say less,
+not more; a shorter complete answer beats a longer one that gets cut off mid-sentence.` : "";
 
     const hardwareCompanionSection = `
 
@@ -260,7 +262,7 @@ I created the webcam component. Saved to MyComputer.
         model: DEFAULT_MODEL,
         // Voice replies stay short for a live call; text mode needs real headroom —
         // 1500 was cutting off FILE_ACTION content mid-file on anything but trivial scripts.
-        max_tokens: voiceMode ? 300 : 8192,
+        max_tokens: voiceMode ? 500 : 8192,
         system: runtimeSystemPrompt,
         tools: [{ type: "web_search_20250305", name: "web_search" }],
         messages: finalMessages,
@@ -273,7 +275,16 @@ I created the webcam component. Saved to MyComputer.
     }
 
     const data = await anthropicResponse.json();
-    const rawText = data?.content?.map((block) => block?.text || "").join("") || "...";
+    let rawText = data?.content?.map((block) => block?.text || "").join("") || "...";
+
+    // A voice reply that still hit the token ceiling despite the "1-3 sentences" instruction
+    // would otherwise get spoken with a mangled half-sentence at the end. Instead of sending
+    // that fragment to TTS, cut back to the last complete sentence so playback always ends
+    // clean — the model can be asked for more if the user wants it to continue.
+    if (voiceMode && data?.stop_reason === "max_tokens") {
+      const lastPunct = Math.max(rawText.lastIndexOf("."), rawText.lastIndexOf("!"), rawText.lastIndexOf("?"));
+      if (lastPunct > 0) rawText = rawText.slice(0, lastPunct + 1);
+    }
 
     // Parse out FILE_ACTION blocks and execute them - ROBUST MULTILINE HANDLING
     let fileActions = [];

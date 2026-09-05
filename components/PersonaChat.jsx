@@ -245,6 +245,7 @@ export default function PersonaChat() {
   const lastVoiceSendRef = useRef(0);
   const echoGuardRef = useRef(false); // true while AI speaks + brief cooldown after
   const spokenTextRef = useRef(""); // what the AI is currently saying, to tell echo from real barge-in
+  const micPauseReasonRef = useRef(null); // "tts" while we deliberately stopped recognition to free the mic for speechSynthesis
   const messagesContainerRef = useRef(null);
   const messagesEndRef = useRef(null);
   const videoRef = useRef(null);
@@ -501,14 +502,38 @@ export default function PersonaChat() {
     // Speak sentence-by-sentence instead of one long utterance. On Android, the phone's
     // speaker holding audio focus while an utterance plays blocks the mic from hearing
     // anything at all — SpeechRecognition produces zero results until the utterance ends,
-    // so barge-in (and even "para"/"stop") silently did nothing mid-sentence. The brief
-    // gap between chunks is a real silence window where the OS actually returns audio
-    // focus to the mic, so a real interruption lands there instead of never.
+    // so barge-in (and even "para"/"stop") silently did nothing mid-sentence. Chunking alone
+    // wasn't enough: a live continuous recognition session left running through the utterance
+    // just sits deaf the whole time instead of reviving in a 150ms gap, since Android doesn't
+    // hand audio focus back to a *stale* mic stream that fast. So instead of hoping the mic
+    // survives, we explicitly stop() it right before each chunk plays and start() it fresh in
+    // the gap after — a real mic reacquisition, not just silence for an already-open one to
+    // notice. micPauseReasonRef tells the recognition's own onend handler "this stop was us
+    // freeing the mic for TTS, don't run the normal reconnect-after-silence logic" so the two
+    // restart paths don't race each other.
     const chunks = text.slice(0, 2000).match(/[^.!?\n]+[.!?]*(\n|\s|$)/g)?.map((s) => s.trim()).filter(Boolean) || [text];
+
+    // Desktop Chrome keeps the mic live through speechSynthesis playback just fine — this
+    // stop/restart dance is only needed where the OS won't let mic + speaker run at once.
+    const isMobileDevice = typeof navigator !== "undefined" && /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+
+    const pauseMicForSpeech = () => {
+      if (isMobileDevice && recognitionRef.current?.__isLiveCall) {
+        micPauseReasonRef.current = "tts";
+        try { recognitionRef.current.stop(); } catch {}
+      }
+    };
+    const resumeMicAfterSpeech = () => {
+      if (isMobileDevice && recognitionRef.current?.__isLiveCall && micPauseReasonRef.current === "tts") {
+        micPauseReasonRef.current = null;
+        try { recognitionRef.current.start(); } catch {}
+      }
+    };
 
     const speakChunk = (i) => {
       if (i >= chunks.length || speechInterruptedRef.current) {
         setIsSpeaking(false);
+        resumeMicAfterSpeech();
         setTimeout(() => { echoGuardRef.current = false; }, 400);
         return;
       }
@@ -520,10 +545,18 @@ export default function PersonaChat() {
       utter.pitch = 1;
       utter.onstart = () => { setIsSpeaking(true); echoGuardRef.current = true; };
       utter.onend = () => {
-        if (speechInterruptedRef.current) { setIsSpeaking(false); return; }
-        setTimeout(() => speakChunk(i + 1), 150);
+        if (speechInterruptedRef.current) { setIsSpeaking(false); resumeMicAfterSpeech(); return; }
+        // Reopen the mic for a real listening window between sentences before the next one
+        // plays — long enough for SpeechRecognition to actually start capturing, not just fire.
+        // Desktop never paused the mic in the first place, so it keeps its original quick gap.
+        resumeMicAfterSpeech();
+        setTimeout(() => {
+          pauseMicForSpeech();
+          speakChunk(i + 1);
+        }, isMobileDevice ? 500 : 150);
       };
-      utter.onerror = () => { setIsSpeaking(false); setTimeout(() => { echoGuardRef.current = false; }, 400); };
+      utter.onerror = () => { setIsSpeaking(false); resumeMicAfterSpeech(); setTimeout(() => { echoGuardRef.current = false; }, 400); };
+      pauseMicForSpeech();
       window.speechSynthesis.speak(utter);
     };
     speakChunk(0);
@@ -685,6 +718,7 @@ export default function PersonaChat() {
     };
 
     const recognition = new SpeechRecognition();
+    recognition.__isLiveCall = true; // lets speakAssistant tell this one apart from the plain dictation recognizer
     recognition.lang = "es-AR";
     recognition.continuous = true;
     recognition.interimResults = true;
@@ -752,6 +786,9 @@ export default function PersonaChat() {
         setMicLevel(0);
         return;
       }
+      // speakAssistant stopped this itself to free the mic for a TTS chunk — it owns
+      // restarting recognition in the gap between sentences, so don't race it here.
+      if (micPauseReasonRef.current === "tts") return;
       // Chrome stops recognition after a silence/noise window — restart to keep the call
       // "live". A brief delay first: calling start() in the same tick as end() is what used
       // to make noisy input cut the mic in and out every couple seconds — some engines throw
