@@ -666,7 +666,14 @@ export default function PersonaChat() {
           setTimeout(() => reject(new Error("timeout")), 45000)
         );
         asrPipelineRef.current = await Promise.race([
-          pipeline("automatic-speech-recognition", "Xenova/whisper-tiny", { device: "wasm" }),
+          // dtype: "q8" (not the default int4/MatMulNBits quantization) — the default
+          // decoder quantization trips an onnxruntime-web optimizer bug ("TransposeDQ
+          // WeightsForMatMulNBits Missing required scale") that fails the session on
+          // every platform, desktop included. q8 uses plain 8-bit quantization instead.
+          pipeline("automatic-speech-recognition", "Xenova/whisper-tiny", {
+            device: "wasm",
+            dtype: "q8",
+          }),
           timeout,
         ]);
       }
