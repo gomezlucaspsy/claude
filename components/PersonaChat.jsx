@@ -231,6 +231,7 @@ export default function PersonaChat() {
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
   const [voiceSupported, setVoiceSupported] = useState(false);
   const [isListening, setIsListening] = useState(false);
+  const [isPttHeld, setIsPttHeld] = useState(false);
   const [liveMicMode, setLiveMicMode] = useState(false);
   const [autoSpeak, setAutoSpeak] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
@@ -483,8 +484,17 @@ export default function PersonaChat() {
 
   const stopSpeaking = useCallback(() => {
     if (typeof window === "undefined" || !window.speechSynthesis) return;
+    // A manual tap is the one interruption path that doesn't depend on the mic hearing
+    // anything, so it has to work even on phones where mic+speaker can't run at once.
+    speechInterruptedRef.current = true;
     window.speechSynthesis.cancel();
     setIsSpeaking(false);
+    // If speakAssistant had the mic stopped to free it for this speech, hand it back now —
+    // otherwise the call would stay deaf until the next reply's sentence gap happens to fire.
+    if (recognitionRef.current?.__isLiveCall && micPauseReasonRef.current === "tts") {
+      micPauseReasonRef.current = null;
+      try { recognitionRef.current.start(); } catch {}
+    }
   }, []);
 
   const speakAssistant = useCallback((text) => {
@@ -892,6 +902,30 @@ export default function PersonaChat() {
   const toggleListening = () => {
     if (isListening) stopListening();
     else startListening();
+  };
+
+  // Push-to-talk: a button press, not a mic detection, so it interrupts reliably even on
+  // phones where the OS won't let SpeechRecognition hear anything while speechSynthesis
+  // plays. Pressing it cuts the AI off immediately and forces the recognizer live; releasing
+  // it stops recognition right away instead of waiting on its own silence timeout, so
+  // whatever was said finalizes and sends without the usual lag.
+  const handlePttStart = () => {
+    setIsPttHeld(true);
+    stopSpeaking();
+    echoGuardRef.current = false;
+    micPauseReasonRef.current = null;
+    if (!recognitionRef.current) {
+      startLiveVoice();
+    } else {
+      try { recognitionRef.current.start(); } catch {}
+    }
+  };
+
+  const handlePttEnd = () => {
+    setIsPttHeld(false);
+    if (recognitionRef.current) {
+      try { recognitionRef.current.stop(); } catch {}
+    }
   };
 
   const isLiveCallUI = liveMicMode;
@@ -1336,6 +1370,11 @@ export default function PersonaChat() {
         .p3call-round.end{background:#e5484d;border-color:#e5484d;color:#fff;}
         .p3call-round.end:hover{background:#ff5b60;}
         .p3call-round:disabled{opacity:.4;cursor:not-allowed;}
+        .p3call-ptt{position:relative;z-index:6;display:block;margin:0 auto;padding:14px 28px;border-radius:999px;border:1px solid rgba(255,255,255,.2);background:rgba(255,255,255,.08);backdrop-filter:blur(8px);color:#eaf4ff;font-size:14px;font-weight:600;letter-spacing:.3px;cursor:pointer;touch-action:none;user-select:none;-webkit-user-select:none;transition:all .12s ease;}
+        .p3call-ptt.urgent{border-color:rgba(229,72,77,.6);background:rgba(229,72,77,.18);color:#ffb3b6;animation:p3interrupt-pulse 1.4s ease-in-out infinite;}
+        .p3call-ptt.held{background:var(--cc,#4a8fc0);border-color:var(--cc,#4a8fc0);color:#06101c;animation:none;transform:scale(1.04);}
+        .p3call-ptt:disabled{opacity:.4;cursor:not-allowed;}
+        @keyframes p3interrupt-pulse{0%,100%{box-shadow:0 0 0 0 rgba(229,72,77,.35);}50%{box-shadow:0 0 0 8px rgba(229,72,77,0);}}
         .p3call-transcript{position:absolute;inset:0;z-index:8;background:rgba(4,7,14,.88);backdrop-filter:blur(6px);display:flex;flex-direction:column;}
         .p3call-transcript-head{display:flex;align-items:center;justify-content:space-between;padding:calc(14px + env(safe-area-inset-top)) 18px 10px;border-bottom:1px solid var(--sys-line-soft);}
         .p3call-transcript-head span{font-family:'Orbitron',sans-serif;font-size:13px;color:var(--sys-text);letter-spacing:1px;}
@@ -1945,6 +1984,17 @@ export default function PersonaChat() {
                       )}
                     </div>
 
+                    <button
+                      className={`p3call-ptt${isPttHeld ? " held" : ""}${isSpeaking ? " urgent" : ""}`}
+                      onPointerDown={(e) => { e.preventDefault(); handlePttStart(); }}
+                      onPointerUp={handlePttEnd}
+                      onPointerLeave={() => { if (isPttHeld) handlePttEnd(); }}
+                      onPointerCancel={handlePttEnd}
+                      disabled={!voiceSupported}
+                      title="Hold to talk — also interrupts the AI if it's speaking"
+                    >
+                      {isPttHeld ? "🎙 Listening…" : isSpeaking ? "🎙 Hold to interrupt" : "🎙 Hold to talk"}
+                    </button>
                     <div className="p3call-dock">
                       <button
                         className={`p3call-round${autoSpeak ? " active" : ""}`}
