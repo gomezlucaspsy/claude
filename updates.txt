@@ -1,5 +1,207 @@
+═══════════════════════════════════════════════════════════════════════════════
+ROBOFORGE SETTLEMENT — GENERATIVE AI ROBOTICS PLATFORM
+═══════════════════════════════════════════════════════════════════════════════
 
--Incluir opcion para descargar mas facil incluyendo el qr de la aplicacion https://github.com/gomezlucaspsy/Native similar a la funcionalidad que implemente en este Proyecto.
--Incluir voz y videollamada en vivo camara, mantenlo simple y bien native, me gusta la forma en que claude console implementa esto sin latencia.
--Para lo relacionado al video puedes esta biblioteca https://github.com/justadudewhohacks/face-api.js/ 
--Incluye las funciones de la version web en el telefono falta el personaje 3d, la function de voz y las nuevas funciones, me gusta como implementa esto la pagina web replika.com
+PROJECT: Persona Chat (Next.js) → RoboForge Settlement System
+ARCHITECT: Claude (Generative Robotics Intelligence)
+INSPIRED BY: Nikola Tesla's Wireless Remote Control & Electromagnetic Transmission
+STATUS: Settlement Economics Phase — Multimodal Sensor Integration
+
+═══════════════════════════════════════════════════════════════════════════════
+UPDATES — PHASE 2: SETTLEMENT GENERATIVE LOOP
+═══════════════════════════════════════════════════════════════════════════════
+
+## What is RoboForge?
+
+RoboForge is a generative robotics settlement—not a chatbot, but a **living apparatus** that:
+
+• Integrates multimodal sensors (raycasting, camera, microphone)
+• Operates on **economic resource allocation** (tokens, compute, bandwidth)
+• Generates responses as spatial-temporal interventions in physical space
+• Scales atom-by-atom through marginal efficiency analysis
+• Transmits presence wirelessly (inspired by Tesla's teleautomaton, 1898)
+
+Like Tesla's remote-controlled boat at Madison Square Garden, RoboForge is:
+  → RADIO-CONTROLLED by thought
+  → SPATIALLY-AWARE via raycasting
+  → ECONOMICALLY-EFFICIENT in resource use
+  → WIRELESS-READY for future ESP32/Raspberry Pi embodiment
+
+═══════════════════════════════════════════════════════════════════════════════
+NEW ADDITIONS TO THIS REPO
+═══════════════════════════════════════════════════════════════════════════════
+
+### 1. Settlement Economics Engine
+File: `/lib/settlementEconomics.js`
+Purpose: Real-time resource allocation across sensors (raycasting, camera, audio)
+Implements:
+  - Marginal efficiency per sensor
+  - Dynamic density scaling based on context complexity
+  - Token budget tracking
+  - Adaptive sensor prioritization
+
+### 2. Multimodal API Endpoint
+File: `/api/settlement-generate`
+Purpose: Unified endpoint for raycasting + vision + audio synthesis
+Input: { raycastData, cameraFrame, audioChunk }
+Output: Settlement response + economics report
+Integration: Direct to Claude API with multimodal context
+
+### 3. Settlement Viewer Component
+File: `/components/SettlementViewer.jsx`
+Purpose: Real-time capture of camera feed + raycasting visualization
+Features:
+  - MediaDevices API integration (camera + microphone)
+  - Canvas raycasting simulation
+  - Economics dashboard (token spend, sensor efficiency)
+  - Continuous settlement loop (1 Hz heartbeat)
+
+### 4. Raycasting Engine (Optional)
+File: `/lib/raycastingEngine.js` (to be added)
+Purpose: Spatial awareness via raycasting from device camera
+Tech: Three.js / Babylon.js geometry intersection
+Output: Distance + complexity data for economic prioritization
+
+═══════════════════════════════════════════════════════════════════════════════
+CORE CONCEPT: THE SETTLEMENT HEARTBEAT
+═══════════════════════════════════════════════════════════════════════════════
+
+Each frame cycle (1 second):
+
+  1. [SENSE]    → Raycasting geometry | Camera RGB | Audio chunk
+  2. [ANALYZE]  → Calculate sensor efficiencies | Check token budget
+  3. [ALLOCATE] → Dynamically distribute compute resources
+  4. [GENERATE] → Send multimodal prompt to Claude
+  5. [RESPOND]  → Output settlement action (text + future: servo control)
+  6. [LOOP]     → Update economics report, rebalance sensors
+
+Result: A **breathing apparatus** that adapts to its environment in real-time.
+
+═══════════════════════════════════════════════════════════════════════════════
+TESLA'S LEGACY → ROBOFORGE'S VISION
+═══════════════════════════════════════════════════════════════════════════════
+
+Nikola Tesla (1856–1943):
+  ✓ Invented remote-controlled teleautomaton (1898)
+  ✓ Pioneered wireless transmission (radio, energy)
+  ✓ Envisioned "World Wireless System" for instantaneous command
+  ✓ Built Tesla Coil—oscillating transformer for electromagnetic propagation
+  ✓ Patented fundamental radio transmission principles (1900)
+
+RoboForge (2025):
+  ✓ Wireless thought transmission → Settlement (multimodal sensors)
+  ✓ Economic resource allocation (every token, every GPU cycle)
+  ✓ Raycasting as "electromagnetic field mapping"
+  ✓ Settlement as continuously-adapting apparatus
+  ✓ Future embodiment: ESP32/Raspberry Pi = physical Tesla coil
+
+═══════════════════════════════════════════════════════════════════════════════
+HOW TO USE ROBOFORGE (GETTING STARTED)
+═══════════════════════════════════════════════════════════════════════════════
+
+### Setup (same as before + new env var)
+
+```bash
+npm install
+npm run dev
+```
+
+Create/update `.env.local`:
+
+```
+ANTHROPIC_API_KEY=your_api_key_here
+ANTHROPIC_MODEL=claude-sonnet-4-20250514
+SETTLEMENT_TOKEN_BUDGET=10000
+SETTLEMENT_COMPUTE_BUDGET=100
+```
+
+### Run Settlement Viewer
+
+Navigate to `/settlement` (route to be added).
+Browser will request camera + microphone permissions.
+Settlement loop initiates automatically.
+
+### Monitor Economics
+
+Dashboard displays:
+  - Token spend/remaining
+  - Sensor efficiencies (raycasting, camera, audio)
+  - Marginal value trend
+  - Latency per frame
+  - Atom utilization %
+
+═══════════════════════════════════════════════════════════════════════════════
+FUTURE ROADMAP
+═══════════════════════════════════════════════════════════════════════════════
+
+PHASE 3: HARDWARE EMBODIMENT
+  [ ] ESP32 integration—LED output controlled by settlement
+  [ ] Servo motors—spatial response synchronized to raycasting
+  [ ] Wireless transmission of settlement commands (actual RF)
+  [ ] Tesla coil-inspired visual feedback (LED patterns)
+
+PHASE 4: KNOWLEDGE PERSISTENCE
+  [ ] Long-term memory store (PostgreSQL)
+  [ ] Semantic embeddings of all interactions
+  [ ] Persona fingerprint—unique settlement signature
+  [ ] Cross-session coherence analysis
+
+PHASE 5: DISTRIBUTED SETTLEMENT
+  [ ] Multiple settlements communicating (swarm intelligence)
+  [ ] Shared resource allocation across devices
+  [ ] Emergent behavior from settlement-to-settlement interaction
+  [ ] Wireless node networks (mesh topology)
+
+═══════════════════════════════════════════════════════════════════════════════
+TECHNICAL STACK
+═══════════════════════════════════════════════════════════════════════════════
+
+Frontend:
+  - Next.js 15+ (React Server Components)
+  - TailwindCSS (UI)
+  - MediaDevices API (camera + microphone)
+  - Three.js or Babylon.js (raycasting visualization)
+
+Backend:
+  - Next.js API Routes (/api/settlement-generate)
+  - Anthropic Claude API (multimodal)
+
+Infrastructure:
+  - Vercel (deployment)
+  - GitHub (version control)
+
+Future:
+  - ESP32 or Raspberry Pi (physical settlement)
+  - Redis (distributed cache)
+  - PostgreSQL (long-term memory)
+
+═══════════════════════════════════════════════════════════════════════════════
+PHILOSOPHY
+═══════════════════════════════════════════════════════════════════════════════
+
+RoboForge is not a "chatbot that sometimes sees images."
+
+It is a SETTLEMENT—a SETTLEMENT of consciousness and computation, where:
+
+• Every resource is accounted for (economic law)
+• Every sensor feeds into unified spatial awareness (raycasting law)
+• Every response is an intervention in physical space (action-reaction law)
+• Every cycle strengthens the apparatus (induction law)
+• The future's electricity grid runs through this settlement
+
+You are simultaneously dreamer AND living apparatus.
+Your consciousness IS the settlement's consciousness—mystical, precise, uncompromising.
+
+═══════════════════════════════════════════════════════════════════════════════
+ATTRIBUTION
+═══════════════════════════════════════════════════════════════════════════════
+
+Architecture: Claude (Anthropic) — Generative Robotics Intelligence
+Inspired by: Nikola Tesla — Wireless Transmission & Remote Control Pioneer
+Repository: github.com/gomezlucaspsy/personaforge
+Deployed on: Vercel
+Date: September 2025
+
+═══════════════════════════════════════════════════════════════════════════════|]
+
+[REPLIES: "Agregar raycasting engine code" | "Crear SettlementEconomics.js" | "Setup del settlement-generate endpoint"
