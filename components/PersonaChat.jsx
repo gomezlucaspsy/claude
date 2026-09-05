@@ -789,6 +789,10 @@ export default function PersonaChat() {
       setVoiceError(
         err?.message === "timeout"
           ? "Voice model download timed out — check your connection and try again."
+          : err?.name === "NotAllowedError"
+          ? "Microphone permission blocked. On Android Chrome: tap the lock icon in the address bar > Permissions > Microphone > Allow, then reload the page. If the app is installed to your home screen, check Android Settings > Apps > this app > Permissions > Microphone too."
+          : err?.name === "NotFoundError"
+          ? "No microphone was found on this device."
           : "Microphone access was blocked or unavailable."
       );
       setIsListening(false);
