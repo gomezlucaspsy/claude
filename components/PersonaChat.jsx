@@ -498,9 +498,13 @@ export default function PersonaChat() {
     if (voiceMatch) utter.voice = voiceMatch;
     utter.rate = 1;
     utter.pitch = 1;
+    // 400ms, not the old 1.5s — native SpeechRecognition already applies its own echo
+    // cancellation, so this only needs to cover the brief acoustic tail right at cutoff,
+    // not act as the primary echo defense. A longer window was swallowing real barge-in
+    // speech that landed inside it (see onresult's echoGuardRef handling).
     utter.onstart = () => { setIsSpeaking(true); echoGuardRef.current = true; };
-    utter.onend = () => { setIsSpeaking(false); setTimeout(() => { echoGuardRef.current = false; }, 1500); };
-    utter.onerror = () => { setIsSpeaking(false); setTimeout(() => { echoGuardRef.current = false; }, 1500); };
+    utter.onend = () => { setIsSpeaking(false); setTimeout(() => { echoGuardRef.current = false; }, 400); };
+    utter.onerror = () => { setIsSpeaking(false); setTimeout(() => { echoGuardRef.current = false; }, 400); };
     window.speechSynthesis.speak(utter);
   }, [autoSpeak]);
 
@@ -548,6 +552,7 @@ export default function PersonaChat() {
           personaId: selectedChar.id,
           fileTree: mcGetTree(selectedChar.id),
           selfAnalysisDue,
+          voiceMode: liveMicMode,
           charMeta: {
             name: selectedChar.name,
             title: selectedChar.title,
@@ -649,17 +654,23 @@ export default function PersonaChat() {
     recognition.maxAlternatives = 1;
 
     recognition.onresult = (event) => {
-      const aiSpeaking = echoGuardRef.current; // catches echo that arrives after speech ends
+      // echoGuardRef is read fresh per result (not hoisted once) so that clearing it
+      // mid-loop — because the user just barged in — actually unblocks the final
+      // transcript of that same interruption instead of still treating it as echo.
       for (let i = event.resultIndex; i < event.results.length; i += 1) {
         const result = event.results[i];
         const transcript = result?.[0]?.transcript?.trim();
-        if (!transcript) continue;
+        if (!transcript || transcript.length < 2) continue; // skip stray noise blips
 
         if (!result.isFinal) {
           // Barge-in: cut the AI off the instant real speech starts, not when it finishes.
-          if (window.speechSynthesis?.speaking) {
+          // This is a deliberate interruption, not echo — clear the guard immediately so
+          // the final transcript that follows (usually within the old 1.5s window) isn't
+          // then discarded as if it were the AI's own trailing audio.
+          if (window.speechSynthesis?.speaking || echoGuardRef.current) {
             window.speechSynthesis.cancel();
             setIsSpeaking(false);
+            echoGuardRef.current = false;
           }
           setMicLevel(0.6); // native API gives no volume signal — just show "hearing you"
           continue;
@@ -669,10 +680,11 @@ export default function PersonaChat() {
         const confidence = result[0]?.confidence ?? 1;
         if (confidence < 0.6) continue; // tighter threshold — keyboard clicks/noise score low
 
-        if (aiSpeaking) {
+        if (echoGuardRef.current) {
           if (STOP_COMMANDS.test(transcript)) {
             window.speechSynthesis.cancel();
             setIsSpeaking(false);
+            echoGuardRef.current = false;
           }
           continue;
         }
@@ -703,13 +715,19 @@ export default function PersonaChat() {
         setMicLevel(0);
         return;
       }
-      // Chrome stops recognition after a silence window — restart it to keep the call "live".
-      try {
-        recognition.start();
-      } catch {
-        recognitionRef.current = null;
-        setIsListening(false);
-      }
+      // Chrome stops recognition after a silence/noise window — restart to keep the call
+      // "live". A brief delay first: calling start() in the same tick as end() is what used
+      // to make noisy input cut the mic in and out every couple seconds — some engines throw
+      // (or immediately re-end) when restarted before they've fully torn down.
+      setTimeout(() => {
+        if (intentionalStopRef.current || recognitionRef.current !== recognition) return;
+        try {
+          recognition.start();
+        } catch {
+          recognitionRef.current = null;
+          setIsListening(false);
+        }
+      }, 250);
     };
 
     recognitionRef.current = recognition;

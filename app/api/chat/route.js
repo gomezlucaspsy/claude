@@ -116,6 +116,7 @@ export async function POST(request) {
     const systemPrompt = body?.systemPrompt ? body.systemPrompt.slice(0, 1200) : "";
     const fileTree = body?.fileTree || "(empty)";
     const selfAnalysisDue = body?.selfAnalysisDue || false;
+    const voiceMode = body?.voiceMode === true;
     const incomingMessages = Array.isArray(body?.messages) ? body.messages : [];
 
     // Process messages with image support
@@ -174,8 +175,19 @@ Use a FILE_ACTION to create or update "/self-analysis.md" with 3-5 bullet points
 - One insight about yourself in this interaction
 Keep it concise. Write it in first person.` : "";
 
-    const runtimeSystemPrompt = `${systemPrompt}
+    // Voice calls are spoken and interruptible — a long reply just means more of it gets
+    // talked over before the user can jump in. Keep the model's own output short instead of
+    // truncating it after generation, which used to cut sentences off mid-word.
+    const voiceModeSection = voiceMode ? `
 
+=== LIVE VOICE CALL ===
+This is a spoken phone call, not a text chat — the user is listening out loud and can barge in
+any time. Keep replies SHORT: 1-3 sentences, plain conversational speech. No markdown, no lists,
+no headers, no code blocks, no FILE_ACTION blocks, no [REPLIES:...] suggestions. If the topic
+deserves more depth, give the short version now and let the user ask for more.` : "";
+
+    const runtimeSystemPrompt = `${systemPrompt}
+${voiceModeSection}
 === MyComputer Files ===
 The user's MyComputer currently contains:
 ${fileTree}
@@ -234,7 +246,7 @@ I created the webcam component. Saved to MyComputer.
       },
       body: JSON.stringify({
         model: DEFAULT_MODEL,
-        max_tokens: 1500,
+        max_tokens: voiceMode ? 300 : 1500,
         system: runtimeSystemPrompt,
         tools: [{ type: "web_search_20250305", name: "web_search" }],
         messages: finalMessages,
