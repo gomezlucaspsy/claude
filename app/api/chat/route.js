@@ -246,7 +246,9 @@ I created the webcam component. Saved to MyComputer.
       },
       body: JSON.stringify({
         model: DEFAULT_MODEL,
-        max_tokens: voiceMode ? 300 : 1500,
+        // Voice replies stay short for a live call; text mode needs real headroom —
+        // 1500 was cutting off FILE_ACTION content mid-file on anything but trivial scripts.
+        max_tokens: voiceMode ? 300 : 8192,
         system: runtimeSystemPrompt,
         tools: [{ type: "web_search_20250305", name: "web_search" }],
         messages: finalMessages,

@@ -178,6 +178,19 @@ export default function FileExplorer({ personaId, refreshKey }) {
     setTimeout(() => setSaveMsg(""), 2000);
   };
 
+  const downloadFile = () => {
+    if (!selected) return;
+    const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = selected.name;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  };
+
   const deleteFile = (item, e) => {
     e?.stopPropagation();
     if (!confirm(`Delete "${item.name}"?`)) return;
@@ -309,6 +322,9 @@ export default function FileExplorer({ personaId, refreshKey }) {
               )}
               <button onClick={saveFile} disabled={saving} style={{ ...S.btn("primary"), flexShrink: 0 }}>
                 {saving ? "..." : "Save"}
+              </button>
+              <button onClick={downloadFile} style={{ ...S.btn("ghost"), flexShrink: 0 }}>
+                Download
               </button>
               <button onClick={(e) => deleteFile(selected, e)} style={{ ...S.btn("danger"), flexShrink: 0 }}>
                 Delete
