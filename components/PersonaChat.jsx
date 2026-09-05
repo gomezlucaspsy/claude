@@ -666,13 +666,14 @@ export default function PersonaChat() {
           setTimeout(() => reject(new Error("timeout")), 45000)
         );
         asrPipelineRef.current = await Promise.race([
-          // dtype: "q8" (not the default int4/MatMulNBits quantization) — the default
-          // decoder quantization trips an onnxruntime-web optimizer bug ("TransposeDQ
-          // WeightsForMatMulNBits Missing required scale") that fails the session on
-          // every platform, desktop included. q8 uses plain 8-bit quantization instead.
+          // dtype: "fp32" — "wasm" defaults to the q8-quantized decoder, and that
+          // quantized graph trips an onnxruntime-web optimizer bug ("TransposeDQ
+          // WeightsForMatMulNBits Missing required scale") that fails session creation
+          // on every platform, desktop included. fp32 has no quantize/dequantize nodes
+          // at all, so this optimizer path is never hit. Bigger download, but correct.
           pipeline("automatic-speech-recognition", "Xenova/whisper-tiny", {
             device: "wasm",
-            dtype: "q8",
+            dtype: "fp32",
           }),
           timeout,
         ]);
