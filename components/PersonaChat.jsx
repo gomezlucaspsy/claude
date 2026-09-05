@@ -252,6 +252,7 @@ export default function PersonaChat() {
   const faceDetectIntervalRef = useRef(null);
   const faceapiRef = useRef(null);
   const intentionalStopRef = useRef(false);
+  const speechInterruptedRef = useRef(false); // set true when a real barge-in lands mid-reply
   const inputRef = useRef(null);
   const chatRef = useRef(null);
   const chatHeaderRef = useRef(null);
@@ -489,25 +490,43 @@ export default function PersonaChat() {
     if (!autoSpeak || typeof window === "undefined" || !window.speechSynthesis || !text) return;
     window.speechSynthesis.cancel();
     setIsSpeaking(false);
-    const utter = new SpeechSynthesisUtterance(text.slice(0, 900));
-    spokenTextRef.current = text;
+    speechInterruptedRef.current = false;
+
     const lang = detectSpeechLang(text);
-    utter.lang = lang;
     const voices = window.speechSynthesis.getVoices();
     const voiceMatch =
       voices.find((v) => v.lang === lang) ||
       voices.find((v) => v.lang?.toLowerCase().startsWith(lang.split("-")[0]));
-    if (voiceMatch) utter.voice = voiceMatch;
-    utter.rate = 1;
-    utter.pitch = 1;
-    // 400ms, not the old 1.5s — native SpeechRecognition already applies its own echo
-    // cancellation, so this only needs to cover the brief acoustic tail right at cutoff,
-    // not act as the primary echo defense. A longer window was swallowing real barge-in
-    // speech that landed inside it (see onresult's echoGuardRef handling).
-    utter.onstart = () => { setIsSpeaking(true); echoGuardRef.current = true; };
-    utter.onend = () => { setIsSpeaking(false); setTimeout(() => { echoGuardRef.current = false; }, 400); };
-    utter.onerror = () => { setIsSpeaking(false); setTimeout(() => { echoGuardRef.current = false; }, 400); };
-    window.speechSynthesis.speak(utter);
+
+    // Speak sentence-by-sentence instead of one long utterance. On Android, the phone's
+    // speaker holding audio focus while an utterance plays blocks the mic from hearing
+    // anything at all — SpeechRecognition produces zero results until the utterance ends,
+    // so barge-in (and even "para"/"stop") silently did nothing mid-sentence. The brief
+    // gap between chunks is a real silence window where the OS actually returns audio
+    // focus to the mic, so a real interruption lands there instead of never.
+    const chunks = text.slice(0, 2000).match(/[^.!?\n]+[.!?]*(\n|\s|$)/g)?.map((s) => s.trim()).filter(Boolean) || [text];
+
+    const speakChunk = (i) => {
+      if (i >= chunks.length || speechInterruptedRef.current) {
+        setIsSpeaking(false);
+        setTimeout(() => { echoGuardRef.current = false; }, 400);
+        return;
+      }
+      const utter = new SpeechSynthesisUtterance(chunks[i]);
+      spokenTextRef.current = chunks[i];
+      utter.lang = lang;
+      if (voiceMatch) utter.voice = voiceMatch;
+      utter.rate = 1;
+      utter.pitch = 1;
+      utter.onstart = () => { setIsSpeaking(true); echoGuardRef.current = true; };
+      utter.onend = () => {
+        if (speechInterruptedRef.current) { setIsSpeaking(false); return; }
+        setTimeout(() => speakChunk(i + 1), 150);
+      };
+      utter.onerror = () => { setIsSpeaking(false); setTimeout(() => { echoGuardRef.current = false; }, 400); };
+      window.speechSynthesis.speak(utter);
+    };
+    speakChunk(0);
   }, [autoSpeak]);
 
   const sendMessage = async (overrideInput) => {
@@ -684,6 +703,7 @@ export default function PersonaChat() {
           // Barge-in: cut the AI off the instant real speech starts, not when it finishes —
           // but only if it's not just the AI's own voice leaking back into the mic.
           if ((window.speechSynthesis?.speaking || echoGuardRef.current) && !isLikelyEcho(transcript)) {
+            speechInterruptedRef.current = true;
             window.speechSynthesis.cancel();
             setIsSpeaking(false);
             echoGuardRef.current = false;
@@ -698,6 +718,7 @@ export default function PersonaChat() {
 
         if (echoGuardRef.current || isLikelyEcho(transcript)) {
           if (STOP_COMMANDS.test(transcript)) {
+            speechInterruptedRef.current = true;
             window.speechSynthesis.cancel();
             setIsSpeaking(false);
             echoGuardRef.current = false;
