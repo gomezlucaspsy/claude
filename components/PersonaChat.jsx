@@ -251,7 +251,9 @@ export default function PersonaChat() {
   const cameraStreamRef = useRef(null);
   const faceDetectIntervalRef = useRef(null);
   const faceapiRef = useRef(null);
-  const vadRef = useRef(null); // active Silero VAD instance for the live call, owns its own mic stream
+  const harkRef = useRef(null); // active hark speech-detector instance for the live call
+  const micStreamRef = useRef(null); // the one raw mic stream shared by hark + the recorder
+  const mediaRecorderRef = useRef(null); // records exactly the audio between speech-start/stop
   const asrPipelineRef = useRef(null); // cached local Whisper pipeline, loaded once per session
   const loadingVoiceRef = useRef(false); // guards against a second tap firing a parallel load
   const intentionalStopRef = useRef(false);
@@ -609,10 +611,21 @@ export default function PersonaChat() {
 
   const stopListening = () => {
     intentionalStopRef.current = true;
-    if (vadRef.current) {
-      const vad = vadRef.current;
-      vadRef.current = null;
-      vad.pause().catch(() => {});
+    if (harkRef.current) {
+      try {
+        harkRef.current.stop();
+      } catch {}
+      harkRef.current = null;
+    }
+    if (mediaRecorderRef.current) {
+      try {
+        if (mediaRecorderRef.current.state !== "inactive") mediaRecorderRef.current.stop();
+      } catch {}
+      mediaRecorderRef.current = null;
+    }
+    if (micStreamRef.current) {
+      micStreamRef.current.getTracks().forEach((t) => t.stop());
+      micStreamRef.current = null;
     }
     if (recognitionRef.current) {
       try {
@@ -624,16 +637,17 @@ export default function PersonaChat() {
     setIsListening(false);
   };
 
-  // Live call voice loop. A real voice-activity-detection model (Silero VAD, running
-  // locally in the browser via @ricky0123/vad-web — the same approach real voice-AI
-  // products use) decides when you start/stop talking, instead of relying on the
-  // browser's own SpeechRecognition and its silence auto-timeout — that timeout, and
-  // the restart loop needed to recover from it, is what made the Android mic cut in
-  // and out. The mic stream is requested once for the whole call and VAD owns it for
-  // the duration — nothing here re-acquires it mid-call. Transcription runs locally
-  // too (Whisper via @huggingface/transformers) straight off the raw samples VAD
-  // captured — no echo cancellation/noise suppression/auto-gain, since this audio is
-  // only ever read by the model, not played back through a speaker.
+  // Live call voice loop. hark (MIT, otalk/hark — the volume-detection library behind
+  // SimpleWebRTC) decides when you start/stop talking by watching mic volume, instead of
+  // relying on the browser's own SpeechRecognition and its silence auto-timeout — that
+  // timeout, and the restart loop needed to recover from it, is what made the Android mic
+  // cut in and out. It's plain Web Audio FFT analysis, not a model — no extra ONNX runtime
+  // in memory alongside Whisper's, which is what was crashing the tab on lower-RAM phones
+  // when we used a second ML model (Silero VAD) just for turn detection. MediaRecorder
+  // captures exactly the audio between hark's speaking/stopped_speaking events, decoded
+  // and transcribed locally (Whisper via @huggingface/transformers) — no echo
+  // cancellation/noise suppression/auto-gain, since this audio is only ever read by the
+  // model, not played back through a speaker.
   const startLiveVoice = async () => {
     if (typeof window === "undefined" || !navigator.mediaDevices?.getUserMedia) return;
     if (loadingVoiceRef.current) return; // already starting — a second tap must not fire a parallel load
@@ -648,12 +662,11 @@ export default function PersonaChat() {
       if (!asrPipelineRef.current) {
         setVoiceStatus("Loading offline voice recognition (first time only)…");
         const { pipeline } = await import("@huggingface/transformers");
-        const device = navigator.gpu ? "webgpu" : "wasm";
         const timeout = new Promise((_, reject) =>
           setTimeout(() => reject(new Error("timeout")), 45000)
         );
         asrPipelineRef.current = await Promise.race([
-          pipeline("automatic-speech-recognition", "Xenova/whisper-tiny", { device }),
+          pipeline("automatic-speech-recognition", "Xenova/whisper-tiny", { device: "wasm" }),
           timeout,
         ]);
       }
@@ -663,63 +676,112 @@ export default function PersonaChat() {
       }
       const asr = asrPipelineRef.current;
 
-      const { MicVAD } = await import("@ricky0123/vad-web");
-      const vad = await MicVAD.new({
-        getStream: () =>
-          navigator.mediaDevices.getUserMedia({
-            audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
-          }),
-        onFrameProcessed: (_probabilities, frame) => {
-          let sum = 0;
-          for (let i = 0; i < frame.length; i++) sum += Math.abs(frame[i]);
-          const avg = (sum / frame.length) * 3;
-          setMicLevel((prev) => prev + (avg - prev) * 0.35);
-        },
-        onSpeechStart: () => {
-          // Barge-in: the instant real speech is detected, cut the AI off — same
-          // beat real Live products interrupt on.
-          if (window.speechSynthesis?.speaking) {
-            window.speechSynthesis.cancel();
-            setIsSpeaking(false);
-          }
-        },
-        onSpeechEnd: async (audio) => {
-          try {
-            // Peak-normalize before transcribing: autoGainControl is off (see getStream
-            // above), so raw mic input can be quiet enough that Whisper hears near-silence
-            // and returns empty text even though you clearly said something. This only
-            // rescales the numbers the model sees — it's not a speaker-facing audio filter.
-            let peak = 0;
-            for (let i = 0; i < audio.length; i++) {
-              const abs = Math.abs(audio[i]);
-              if (abs > peak) peak = abs;
-            }
-            const normalized = peak > 0 && peak < 0.9 ? audio.map((s) => (s / peak) * 0.9) : audio;
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
+      });
+      if (intentionalStopRef.current) {
+        stream.getTracks().forEach((t) => t.stop());
+        return;
+      }
+      micStreamRef.current = stream;
 
-            const result = await asr(normalized, { language: "spanish", task: "transcribe" });
-            const text = (result?.text || "").trim();
-            if (!text) return;
-            const words = text.split(/\s+/).filter(Boolean);
-            if (STOP_COMMANDS.test(text) && words.length <= 3) return; // already interrupted in onSpeechStart
-            const now = Date.now();
-            if (now - lastVoiceSendRef.current < 700) return; // guard against a double-fire
-            lastVoiceSendRef.current = now;
-            sendMessage(text);
-          } catch {
-            // transcription failed for this segment — surface it instead of dying silently,
-            // but keep the mic live so the next utterance still gets a chance.
-            setVoiceError("Couldn't hear that clearly — try again.");
+      const mimeType = ["audio/webm;codecs=opus", "audio/webm", "audio/ogg;codecs=opus"].find(
+        (t) => window.MediaRecorder?.isTypeSupported?.(t)
+      );
+      const transcribeBlob = async (blob) => {
+        try {
+          const arrayBuffer = await blob.arrayBuffer();
+          // Decode once at native rate, then render through a 16kHz offline context to
+          // resample — Whisper expects Float32 samples at exactly 16000Hz, and a raw
+          // array passed straight in isn't resampled automatically. AudioContext often
+          // ignores a requested sampleRate on mobile, so OfflineAudioContext (which
+          // strictly honors it) is the reliable way to get there.
+          const decodeCtx = new (window.AudioContext || window.webkitAudioContext)();
+          const decoded = await decodeCtx.decodeAudioData(arrayBuffer);
+          decodeCtx.close().catch(() => {});
+          const OfflineCtx = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+          const offline = new OfflineCtx(1, Math.ceil(decoded.duration * 16000), 16000);
+          const source = offline.createBufferSource();
+          source.buffer = decoded;
+          source.connect(offline.destination);
+          source.start();
+          const rendered = await offline.startRendering();
+          const audio = rendered.getChannelData(0);
+
+          // Peak-normalize: autoGainControl is off (see getUserMedia above), so raw mic
+          // input can be quiet enough that Whisper hears near-silence and returns empty
+          // text even though you clearly said something. This only rescales the numbers
+          // the model sees — it's not a speaker-facing audio filter.
+          let peak = 0;
+          for (let i = 0; i < audio.length; i++) {
+            const abs = Math.abs(audio[i]);
+            if (abs > peak) peak = abs;
           }
-        },
+          const normalized = peak > 0 && peak < 0.9 ? audio.map((s) => (s / peak) * 0.9) : audio;
+
+          const result = await asr(normalized, { language: "spanish", task: "transcribe" });
+          const text = (result?.text || "").trim();
+          if (!text) return;
+          const words = text.split(/\s+/).filter(Boolean);
+          if (STOP_COMMANDS.test(text) && words.length <= 3) return; // already interrupted in onSpeechStart
+          const now = Date.now();
+          if (now - lastVoiceSendRef.current < 700) return; // guard against a double-fire
+          lastVoiceSendRef.current = now;
+          sendMessage(text);
+        } catch {
+          // transcription failed for this segment — surface it instead of dying silently,
+          // but keep the mic live so the next utterance still gets a chance.
+          setVoiceError("Couldn't hear that clearly — try again.");
+        }
+      };
+
+      const startRecording = () => {
+        if (mediaRecorderRef.current) return; // already recording this utterance
+        const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+        const chunks = [];
+        recorder.ondataavailable = (e) => {
+          if (e.data && e.data.size > 0) chunks.push(e.data);
+        };
+        recorder.onstop = () => {
+          mediaRecorderRef.current = null;
+          if (chunks.length) transcribeBlob(new Blob(chunks, { type: recorder.mimeType }));
+        };
+        mediaRecorderRef.current = recorder;
+        recorder.start();
+      };
+
+      const stopRecording = () => {
+        if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+          mediaRecorderRef.current.stop();
+        }
+      };
+
+      const { default: hark } = await import("hark");
+      const speechEvents = hark(stream, { threshold: -55, interval: 100, play: false });
+      speechEvents.on("speaking", () => {
+        // Barge-in: the instant real speech is detected, cut the AI off — same
+        // beat real Live products interrupt on.
+        if (window.speechSynthesis?.speaking) {
+          window.speechSynthesis.cancel();
+          setIsSpeaking(false);
+        }
+        startRecording();
+      });
+      speechEvents.on("stopped_speaking", stopRecording);
+      speechEvents.on("volume_change", (dBFS) => {
+        // dBFS ranges roughly -100 (silence) to 0 (loudest) — normalize to 0..1 for the avatar.
+        const level = Math.max(0, Math.min(1, (dBFS + 100) / 100));
+        setMicLevel((prev) => prev + (level - prev) * 0.35);
       });
 
       if (intentionalStopRef.current) {
-        vad.pause().catch(() => {});
+        speechEvents.stop();
+        stream.getTracks().forEach((t) => t.stop());
+        micStreamRef.current = null;
         setVoiceError("");
         return;
       }
-      vadRef.current = vad;
-      vad.start();
+      harkRef.current = speechEvents;
       setVoiceError("");
       setIsListening(true);
     } catch (err) {
@@ -929,10 +991,15 @@ export default function PersonaChat() {
   useEffect(() => {
     return () => {
       intentionalStopRef.current = true;
-      if (vadRef.current) {
-        const vad = vadRef.current;
-        vadRef.current = null;
-        vad.pause().catch(() => {});
+      if (harkRef.current) {
+        try {
+          harkRef.current.stop();
+        } catch {}
+        harkRef.current = null;
+      }
+      if (micStreamRef.current) {
+        micStreamRef.current.getTracks().forEach((t) => t.stop());
+        micStreamRef.current = null;
       }
       stopVideoCall();
     };

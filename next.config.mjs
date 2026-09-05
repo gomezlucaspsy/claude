@@ -20,14 +20,13 @@ const nextConfig = {
   // server function's filesystem "just in case", which blew every deploy past
   // Vercel's 250MB function-size limit. Excluding the files directly is what
   // actually keeps them out.
-  serverExternalPackages: ["@huggingface/transformers", "@ricky0123/vad-web", "onnxruntime-node", "onnxruntime-web", "sharp"],
+  serverExternalPackages: ["@huggingface/transformers", "onnxruntime-node", "sharp"],
   outputFileTracingExcludes: {
     "*": [
       "node_modules/@huggingface/transformers/dist/transformers.node.*",
       "node_modules/onnxruntime-node/**",
       "node_modules/sharp/**",
       "node_modules/@img/sharp-*/**",
-      "node_modules/@ricky0123/vad-web/**",
     ],
   },
   webpack: (config, { isServer }) => {
