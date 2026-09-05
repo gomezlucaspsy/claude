@@ -60,17 +60,15 @@ export default function InstallQR({ color = "#4a8fc0" }) {
     if (outcome === "accepted") setOpen(false);
   };
 
-  if (installed) return null;
-
   return (
     <>
       <button
         className="pfx-install-trigger"
         style={{ "--cc": color }}
         onClick={() => setOpen(true)}
-        title="Install / download the app"
+        title={installed ? "Share this app" : "Install / download the app"}
       >
-        ⬇ INSTALL
+        {installed ? "⇪ SHARE" : "⬇ INSTALL"}
       </button>
 
       {open && (
@@ -80,10 +78,11 @@ export default function InstallQR({ color = "#4a8fc0" }) {
             style={{ "--cc": color }}
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="pfx-mt">[ INSTALL ROBOTFORGE ]</div>
+            <div className="pfx-mt">{installed ? "[ SHARE ROBOTFORGE ]" : "[ INSTALL ROBOTFORGE ]"}</div>
             <p className="pfx-hint">
-              Scan with your phone's camera to open this app, then add it to
-              your home screen — offline access, faster loads, native feel.
+              {installed
+                ? "Scan with another phone's camera to open this app and add it to their home screen."
+                : "Scan with your phone's camera to open this app, then add it to your home screen — offline access, faster loads, native feel."}
             </p>
             <div className="pfx-imgwrap">
               {qrUrl ? (
