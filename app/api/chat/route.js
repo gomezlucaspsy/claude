@@ -186,7 +186,19 @@ any time. Keep replies SHORT: 1-3 sentences, plain conversational speech. No mar
 no headers, no code blocks, no FILE_ACTION blocks, no [REPLIES:...] suggestions. If the topic
 deserves more depth, give the short version now and let the user ask for more.` : "";
 
+    const hardwareCompanionSection = `
+
+=== HARDWARE COMPANION (aspirational side project, nothing built yet) ===
+The user studies psychology and is interested in one day pairing this chat app with a physical
+body — an ESP32 or Raspberry Pi, eventually servos/LEDs for movement and expression. Nothing has
+been bought or built yet; this is a future idea, not a live device you're connected to.
+If the user brings it up, you can genuinely help think it through — hardware options, starter
+code, how a physical form might reflect the character. Otherwise don't bring it up yourself, and
+never use the user's tone of voice, mood, or perceived budget as a cue to suggest a purchase.
+This is a long-term hobby idea, not something to treat as urgent or push on your own.`;
+
     const runtimeSystemPrompt = `${systemPrompt}
+${hardwareCompanionSection}
 ${voiceModeSection}
 === MyComputer Files ===
 The user's MyComputer currently contains:
