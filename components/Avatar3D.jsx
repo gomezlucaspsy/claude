@@ -765,7 +765,11 @@ export default function Avatar3D({ color = "#4a8fc0", state = "idle", customizat
   return (
     <div style={{ width: "100%", height: "100%", position: "relative" }}>
       <Canvas
-        camera={closeUp ? { position: [0, 0.3, 2.3], fov: 30 } : { position: [0, 0.15, 2.2], fov: 30 }}
+        // z pulled back from the original 2.3/2.2 — at that distance the hair mesh's top
+        // point (~0.62 world Y) sat right at the edge of the 30° vertical FOV cone (~0.62
+        // visible half-height), so the head was clipped by a hair's width on every screen.
+        // The extra distance buys headroom without changing fov (which would distort).
+        camera={closeUp ? { position: [0, 0.3, 2.75], fov: 30 } : { position: [0, 0.15, 2.65], fov: 30 }}
         dpr={dpr}
         gl={{
           antialias: !isMobileProfile,

@@ -603,6 +603,14 @@ export default function PersonaChat() {
     }
   };
 
+  // The live-call SpeechRecognition handler is set up once per call and keeps running
+  // across re-renders — calling sendMessage directly from it would freeze that closure at
+  // whatever cameraOn/uploadedImage were at call-start, so turning the camera on mid-call
+  // would never actually reach the AI. Route through a ref that always points at the
+  // current render's sendMessage instead.
+  const sendMessageRef = useRef(sendMessage);
+  sendMessageRef.current = sendMessage;
+
   const stopListening = () => {
     intentionalStopRef.current = true;
     if (recognitionRef.current) {
@@ -674,7 +682,7 @@ export default function PersonaChat() {
         const now = Date.now();
         if (now - lastVoiceSendRef.current < 700) continue; // guard against a double-fire
         lastVoiceSendRef.current = now;
-        sendMessage(transcript);
+        sendMessageRef.current(transcript);
       }
     };
 
@@ -1222,7 +1230,7 @@ export default function PersonaChat() {
         .p3call-error{position:absolute;top:calc(64px + env(safe-area-inset-top));left:16px;right:16px;z-index:6;background:rgba(40,10,14,.75);border:1px solid rgba(242,95,111,.6);backdrop-filter:blur(10px);color:#ffd0d6;font-family:'JetBrains Mono',monospace;font-size:11px;line-height:1.4;letter-spacing:.3px;padding:10px 14px;border-radius:14px;text-align:center;}
         .p3call-status{position:absolute;top:calc(64px + env(safe-area-inset-top));left:16px;right:16px;z-index:6;background:var(--sys-panel);border:1px solid var(--sys-line);backdrop-filter:blur(10px);color:var(--sys-muted);font-family:'JetBrains Mono',monospace;font-size:11px;line-height:1.4;letter-spacing:.3px;padding:10px 14px;border-radius:14px;text-align:center;}
         .p3call-transcript-toggle{background:rgba(8,14,26,.6);border:1px solid rgba(255,255,255,.14);backdrop-filter:blur(10px);color:#eaf4ff;width:34px;height:34px;border-radius:50%;font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
-        .p3cam-pip{position:absolute;bottom:16px;right:16px;width:88px;height:120px;border-radius:16px;overflow:hidden;border:1px solid rgba(255,255,255,.25);box-shadow:0 8px 20px rgba(0,0,0,.5);z-index:6;background:#000;}
+        .p3cam-pip{position:absolute;top:calc(64px + env(safe-area-inset-top));right:16px;width:88px;height:120px;border-radius:16px;overflow:hidden;border:1px solid rgba(255,255,255,.25);box-shadow:0 8px 20px rgba(0,0,0,.5);z-index:6;background:#000;}
         .p3cam-video{width:100%;height:100%;object-fit:cover;transform:scaleX(-1);display:block;}
         .p3cam-tag{position:absolute;left:0;right:0;bottom:0;background:rgba(2,6,14,.72);color:var(--cc,#4a8fc0);font-family:'JetBrains Mono',monospace;font-size:8px;letter-spacing:.6px;text-align:center;padding:2px 0;text-transform:uppercase;}
         .p3call-caption-wrap{position:absolute;left:16px;right:16px;bottom:16px;z-index:5;display:flex;justify-content:center;pointer-events:none;}
@@ -1273,7 +1281,7 @@ export default function PersonaChat() {
           .p3voice-hint { width: 100%; }
           .p3call-round{width:50px;height:50px;font-size:17px;}
           .p3call-dock{gap:12px;}
-          .p3cam-pip{width:64px;height:88px;bottom:10px;right:10px;}
+          .p3cam-pip{width:64px;height:88px;top:calc(56px + env(safe-area-inset-top));right:10px;}
         }
       `}</style>
 
