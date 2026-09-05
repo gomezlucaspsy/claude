@@ -670,6 +670,23 @@ export default function PersonaChat() {
           timeout,
         ]);
       }
+    } catch (err) {
+      // Model load failures (slow network, low memory, a blocked CDN) have nothing to do
+      // with the microphone — label them separately so the mic-permission message below
+      // doesn't get shown for an unrelated failure.
+      console.error("Voice model load failed:", err);
+      setVoiceStatus("");
+      setVoiceError(
+        err?.message === "timeout"
+          ? "Voice model download timed out — check your connection and try again."
+          : `Couldn't load the voice model (${err?.message || err?.name || "unknown error"}).`
+      );
+      setIsListening(false);
+      loadingVoiceRef.current = false;
+      return;
+    }
+
+    try {
       setVoiceStatus("");
       if (intentionalStopRef.current) {
         return; // user backed out while the model was loading
@@ -785,15 +802,14 @@ export default function PersonaChat() {
       setVoiceError("");
       setIsListening(true);
     } catch (err) {
+      console.error("Live voice setup failed:", err);
       setVoiceStatus("");
       setVoiceError(
-        err?.message === "timeout"
-          ? "Voice model download timed out — check your connection and try again."
-          : err?.name === "NotAllowedError"
+        err?.name === "NotAllowedError"
           ? "Microphone permission blocked. On Android Chrome: tap the lock icon in the address bar > Permissions > Microphone > Allow, then reload the page. If the app is installed to your home screen, check Android Settings > Apps > this app > Permissions > Microphone too."
           : err?.name === "NotFoundError"
           ? "No microphone was found on this device."
-          : "Microphone access was blocked or unavailable."
+          : `Microphone access was blocked or unavailable (${err?.message || err?.name || "unknown error"}).`
       );
       setIsListening(false);
     } finally {
