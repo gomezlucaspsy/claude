@@ -243,7 +243,8 @@ export default function PersonaChat() {
   const thinkTimerRef = useRef(null);
   const recognitionRef = useRef(null);
   const lastVoiceSendRef = useRef(0);
-  const echoGuardRef = useRef(false); // true while AI speaks + 1.5s cooldown after
+  const echoGuardRef = useRef(false); // true while AI speaks + brief cooldown after
+  const spokenTextRef = useRef(""); // what the AI is currently saying, to tell echo from real barge-in
   const messagesContainerRef = useRef(null);
   const messagesEndRef = useRef(null);
   const videoRef = useRef(null);
@@ -489,6 +490,7 @@ export default function PersonaChat() {
     window.speechSynthesis.cancel();
     setIsSpeaking(false);
     const utter = new SpeechSynthesisUtterance(text.slice(0, 900));
+    spokenTextRef.current = text;
     const lang = detectSpeechLang(text);
     utter.lang = lang;
     const voices = window.speechSynthesis.getVoices();
@@ -646,6 +648,22 @@ export default function PersonaChat() {
     setVoiceError("");
 
     const STOP_COMMANDS = /\b(stop|para|pará|callate|callá|silencio|basta|enough|quiet)\b/i;
+    const normalizeWords = (s) =>
+      s.toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, " ").split(/\s+/).filter(Boolean);
+
+    // The phone's own speaker bleeding into the mic gets transcribed too — without this,
+    // that comes back as "the AI heard itself", canceling its own speech and even getting
+    // sent back to it as if the user had said it. If most of a transcript's words are
+    // already in what the AI is currently saying, treat it as echo, not real speech.
+    const isLikelyEcho = (transcript) => {
+      const spoken = spokenTextRef.current;
+      if (!spoken) return false;
+      const words = normalizeWords(transcript);
+      if (!words.length) return false;
+      const spokenWords = new Set(normalizeWords(spoken));
+      const matches = words.filter((w) => spokenWords.has(w)).length;
+      return matches / words.length >= 0.6;
+    };
 
     const recognition = new SpeechRecognition();
     recognition.lang = "es-AR";
@@ -663,11 +681,9 @@ export default function PersonaChat() {
         if (!transcript || transcript.length < 2) continue; // skip stray noise blips
 
         if (!result.isFinal) {
-          // Barge-in: cut the AI off the instant real speech starts, not when it finishes.
-          // This is a deliberate interruption, not echo — clear the guard immediately so
-          // the final transcript that follows (usually within the old 1.5s window) isn't
-          // then discarded as if it were the AI's own trailing audio.
-          if (window.speechSynthesis?.speaking || echoGuardRef.current) {
+          // Barge-in: cut the AI off the instant real speech starts, not when it finishes —
+          // but only if it's not just the AI's own voice leaking back into the mic.
+          if ((window.speechSynthesis?.speaking || echoGuardRef.current) && !isLikelyEcho(transcript)) {
             window.speechSynthesis.cancel();
             setIsSpeaking(false);
             echoGuardRef.current = false;
@@ -680,7 +696,7 @@ export default function PersonaChat() {
         const confidence = result[0]?.confidence ?? 1;
         if (confidence < 0.6) continue; // tighter threshold — keyboard clicks/noise score low
 
-        if (echoGuardRef.current) {
+        if (echoGuardRef.current || isLikelyEcho(transcript)) {
           if (STOP_COMMANDS.test(transcript)) {
             window.speechSynthesis.cancel();
             setIsSpeaking(false);
