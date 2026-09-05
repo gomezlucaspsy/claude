@@ -235,6 +235,7 @@ export default function PersonaChat() {
   const [autoSpeak, setAutoSpeak] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [voiceError, setVoiceError] = useState("");
+  const [voiceStatus, setVoiceStatus] = useState(""); // non-error info banner (e.g. "loading model…")
   const [cameraOn, setCameraOn] = useState(false);
   const [faceApiStatus, setFaceApiStatus] = useState("idle"); // idle | loading | ready
   const [detectedExpression, setDetectedExpression] = useState(null);
@@ -252,6 +253,7 @@ export default function PersonaChat() {
   const faceapiRef = useRef(null);
   const vadRef = useRef(null); // active Silero VAD instance for the live call, owns its own mic stream
   const asrPipelineRef = useRef(null); // cached local Whisper pipeline, loaded once per session
+  const loadingVoiceRef = useRef(false); // guards against a second tap firing a parallel load
   const intentionalStopRef = useRef(false);
   const inputRef = useRef(null);
   const chatRef = useRef(null);
@@ -634,20 +636,29 @@ export default function PersonaChat() {
   // only ever read by the model, not played back through a speaker.
   const startLiveVoice = async () => {
     if (typeof window === "undefined" || !navigator.mediaDevices?.getUserMedia) return;
+    if (loadingVoiceRef.current) return; // already starting — a second tap must not fire a parallel load
+    loadingVoiceRef.current = true;
     setVoiceError("");
+    setVoiceStatus("");
     intentionalStopRef.current = false;
 
     const STOP_COMMANDS = /\b(stop|para|pará|callate|callá|silencio|basta|enough|quiet)\b/i;
 
     try {
       if (!asrPipelineRef.current) {
-        setVoiceError("Loading offline voice recognition (first time only)…");
+        setVoiceStatus("Loading offline voice recognition (first time only)…");
         const { pipeline } = await import("@huggingface/transformers");
         const device = navigator.gpu ? "webgpu" : "wasm";
-        asrPipelineRef.current = await pipeline("automatic-speech-recognition", "Xenova/whisper-tiny", { device });
+        const timeout = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error("timeout")), 45000)
+        );
+        asrPipelineRef.current = await Promise.race([
+          pipeline("automatic-speech-recognition", "Xenova/whisper-tiny", { device }),
+          timeout,
+        ]);
       }
+      setVoiceStatus("");
       if (intentionalStopRef.current) {
-        setVoiceError("");
         return; // user backed out while the model was loading
       }
       const asr = asrPipelineRef.current;
@@ -711,9 +722,16 @@ export default function PersonaChat() {
       vad.start();
       setVoiceError("");
       setIsListening(true);
-    } catch {
-      setVoiceError("Microphone access was blocked or unavailable.");
+    } catch (err) {
+      setVoiceStatus("");
+      setVoiceError(
+        err?.message === "timeout"
+          ? "Voice model download timed out — check your connection and try again."
+          : "Microphone access was blocked or unavailable."
+      );
       setIsListening(false);
+    } finally {
+      loadingVoiceRef.current = false;
     }
   };
 
@@ -1161,6 +1179,7 @@ export default function PersonaChat() {
         .p3voice-hint{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--sys-muted);letter-spacing:.5px;opacity:.9;}
         .p3chat.live-call .p3voice-hint{text-align:center;width:100%;font-size:10px;max-width:760px;}
         .p3voice-error{font-family:'JetBrains Mono',monospace;font-size:10px;color:#ff9faa;letter-spacing:.4px;margin-bottom:8px;}
+        .p3voice-status{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--sys-muted);letter-spacing:.4px;margin-bottom:8px;}
         .p3inpw{display:flex;gap:10px;align-items:flex-end;}
         .p3ta{flex:1;background:var(--sys-panel);border:1px solid var(--sys-line);color:var(--sys-text);font-family:'Inter',sans-serif;font-size:14px;padding:12px 15px;outline:none;resize:none;transition:border-color .2s,box-shadow .2s;border-radius:20px;min-height:48px;max-height:130px;}
         .p3ta:focus{border-color:var(--cc);box-shadow:0 0 0 3px var(--cg),inset 0 0 14px rgba(17,45,89,.36);}
@@ -1226,6 +1245,7 @@ export default function PersonaChat() {
         .p3call-pill{display:inline-flex;align-items:center;gap:8px;background:rgba(8,14,26,.6);border:1px solid rgba(255,255,255,.14);backdrop-filter:blur(10px);color:#eaf4ff;font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:1.4px;text-transform:uppercase;padding:8px 14px;border-radius:999px;}
         .p3call-pill .dot{width:6px;height:6px;border-radius:50%;background:#5eead4;box-shadow:0 0 8px #5eead4;flex-shrink:0;}
         .p3call-error{position:absolute;top:calc(64px + env(safe-area-inset-top));left:16px;right:16px;z-index:6;background:rgba(40,10,14,.75);border:1px solid rgba(242,95,111,.6);backdrop-filter:blur(10px);color:#ffd0d6;font-family:'JetBrains Mono',monospace;font-size:11px;line-height:1.4;letter-spacing:.3px;padding:10px 14px;border-radius:14px;text-align:center;}
+        .p3call-status{position:absolute;top:calc(64px + env(safe-area-inset-top));left:16px;right:16px;z-index:6;background:var(--sys-panel);border:1px solid var(--sys-line);backdrop-filter:blur(10px);color:var(--sys-muted);font-family:'JetBrains Mono',monospace;font-size:11px;line-height:1.4;letter-spacing:.3px;padding:10px 14px;border-radius:14px;text-align:center;}
         .p3call-transcript-toggle{background:rgba(8,14,26,.6);border:1px solid rgba(255,255,255,.14);backdrop-filter:blur(10px);color:#eaf4ff;width:34px;height:34px;border-radius:50%;font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
         .p3cam-pip{position:absolute;bottom:16px;right:16px;width:88px;height:120px;border-radius:16px;overflow:hidden;border:1px solid rgba(255,255,255,.25);box-shadow:0 8px 20px rgba(0,0,0,.5);z-index:6;background:#000;}
         .p3cam-video{width:100%;height:100%;object-fit:cover;transform:scaleX(-1);display:block;}
@@ -1805,6 +1825,7 @@ export default function PersonaChat() {
                       )}
 
                       {voiceError && <div className="p3call-error">{voiceError}</div>}
+                      {!voiceError && voiceStatus && <div className="p3call-status">{voiceStatus}</div>}
 
                       {messages.length > 0 && (
                         <div className="p3call-caption-wrap">
@@ -1966,6 +1987,7 @@ export default function PersonaChat() {
                     </div>
                   </div>
                   {voiceError && <div className="p3voice-error">{voiceError}</div>}
+                  {!voiceError && voiceStatus && <div className="p3voice-status">{voiceStatus}</div>}
                   {/* Image Upload - Available to all characters */}
                   <div style={{marginBottom: "12px"}}>
                     <button
