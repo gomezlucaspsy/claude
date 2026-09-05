@@ -674,7 +674,18 @@ export default function PersonaChat() {
         },
         onSpeechEnd: async (audio) => {
           try {
-            const result = await asr(audio, { language: "spanish", task: "transcribe" });
+            // Peak-normalize before transcribing: autoGainControl is off (see getStream
+            // above), so raw mic input can be quiet enough that Whisper hears near-silence
+            // and returns empty text even though you clearly said something. This only
+            // rescales the numbers the model sees — it's not a speaker-facing audio filter.
+            let peak = 0;
+            for (let i = 0; i < audio.length; i++) {
+              const abs = Math.abs(audio[i]);
+              if (abs > peak) peak = abs;
+            }
+            const normalized = peak > 0 && peak < 0.9 ? audio.map((s) => (s / peak) * 0.9) : audio;
+
+            const result = await asr(normalized, { language: "spanish", task: "transcribe" });
             const text = (result?.text || "").trim();
             if (!text) return;
             const words = text.split(/\s+/).filter(Boolean);
@@ -684,7 +695,9 @@ export default function PersonaChat() {
             lastVoiceSendRef.current = now;
             sendMessage(text);
           } catch {
-            // transcription failed for this segment — drop it, mic stays live for the next one
+            // transcription failed for this segment — surface it instead of dying silently,
+            // but keep the mic live so the next utterance still gets a chance.
+            setVoiceError("Couldn't hear that clearly — try again.");
           }
         },
       });
