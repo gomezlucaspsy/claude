@@ -235,7 +235,6 @@ export default function PersonaChat() {
   const [autoSpeak, setAutoSpeak] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [voiceError, setVoiceError] = useState("");
-  const [voiceStatus, setVoiceStatus] = useState(""); // non-error info banner (e.g. "loading model…")
   const [cameraOn, setCameraOn] = useState(false);
   const [faceApiStatus, setFaceApiStatus] = useState("idle"); // idle | loading | ready
   const [detectedExpression, setDetectedExpression] = useState(null);
@@ -251,11 +250,6 @@ export default function PersonaChat() {
   const cameraStreamRef = useRef(null);
   const faceDetectIntervalRef = useRef(null);
   const faceapiRef = useRef(null);
-  const harkRef = useRef(null); // active hark speech-detector instance for the live call
-  const micStreamRef = useRef(null); // the one raw mic stream shared by hark + the recorder
-  const mediaRecorderRef = useRef(null); // records exactly the audio between speech-start/stop
-  const asrPipelineRef = useRef(null); // cached local Whisper pipeline, loaded once per session
-  const loadingVoiceRef = useRef(false); // guards against a second tap firing a parallel load
   const intentionalStopRef = useRef(false);
   const inputRef = useRef(null);
   const chatRef = useRef(null);
@@ -611,22 +605,6 @@ export default function PersonaChat() {
 
   const stopListening = () => {
     intentionalStopRef.current = true;
-    if (harkRef.current) {
-      try {
-        harkRef.current.stop();
-      } catch {}
-      harkRef.current = null;
-    }
-    if (mediaRecorderRef.current) {
-      try {
-        if (mediaRecorderRef.current.state !== "inactive") mediaRecorderRef.current.stop();
-      } catch {}
-      mediaRecorderRef.current = null;
-    }
-    if (micStreamRef.current) {
-      micStreamRef.current.getTracks().forEach((t) => t.stop());
-      micStreamRef.current = null;
-    }
     if (recognitionRef.current) {
       try {
         recognitionRef.current.stop();
@@ -637,192 +615,98 @@ export default function PersonaChat() {
     setIsListening(false);
   };
 
-  // Live call voice loop. hark (MIT, otalk/hark — the volume-detection library behind
-  // SimpleWebRTC) decides when you start/stop talking by watching mic volume, instead of
-  // relying on the browser's own SpeechRecognition and its silence auto-timeout — that
-  // timeout, and the restart loop needed to recover from it, is what made the Android mic
-  // cut in and out. It's plain Web Audio FFT analysis, not a model — no extra ONNX runtime
-  // in memory alongside Whisper's, which is what was crashing the tab on lower-RAM phones
-  // when we used a second ML model (Silero VAD) just for turn detection. MediaRecorder
-  // captures exactly the audio between hark's speaking/stopped_speaking events, decoded
-  // and transcribed locally (Whisper via @huggingface/transformers) — no echo
-  // cancellation/noise suppression/auto-gain, since this audio is only ever read by the
-  // model, not played back through a speaker.
-  const startLiveVoice = async () => {
-    if (typeof window === "undefined" || !navigator.mediaDevices?.getUserMedia) return;
-    if (loadingVoiceRef.current) return; // already starting — a second tap must not fire a parallel load
-    loadingVoiceRef.current = true;
-    setVoiceError("");
-    setVoiceStatus("");
+  // Live call voice loop — the browser's own SpeechRecognition (Web Speech API), continuous
+  // + auto-restarted on end. A local Whisper/onnxruntime-web pipeline lived here before to
+  // dodge SpeechRecognition's silence-timeout quirk on Android, but the model's memory
+  // footprint crashed the whole tab on lower-RAM phones outright — worse than the quirk it
+  // was meant to fix. Native recognition ships in Chrome already; restarting it ourselves
+  // on "end" is what keeps the call feeling continuous instead of cutting out.
+  const startLiveVoice = () => {
+    if (typeof window === "undefined") return;
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition || !window.isSecureContext) {
+      setVoiceError("Microphone requires HTTPS and a browser with Speech Recognition.");
+      return;
+    }
+    if (recognitionRef.current) return; // already running
     intentionalStopRef.current = false;
+    setVoiceError("");
 
     const STOP_COMMANDS = /\b(stop|para|pará|callate|callá|silencio|basta|enough|quiet)\b/i;
 
-    try {
-      if (!asrPipelineRef.current) {
-        setVoiceStatus("Loading offline voice recognition (first time only)…");
-        const { pipeline } = await import("@huggingface/transformers");
-        const timeout = new Promise((_, reject) =>
-          setTimeout(() => reject(new Error("timeout")), 45000)
-        );
-        asrPipelineRef.current = await Promise.race([
-          // dtype: "fp32" — "wasm" defaults to the q8-quantized decoder, and that
-          // quantized graph trips an onnxruntime-web optimizer bug ("TransposeDQ
-          // WeightsForMatMulNBits Missing required scale") that fails session creation
-          // on every platform, desktop included. fp32 has no quantize/dequantize nodes
-          // at all, so this optimizer path is never hit. Bigger download, but correct.
-          pipeline("automatic-speech-recognition", "Xenova/whisper-tiny", {
-            device: "wasm",
-            dtype: "fp32",
-          }),
-          timeout,
-        ]);
-      }
-    } catch (err) {
-      // Model load failures (slow network, low memory, a blocked CDN) have nothing to do
-      // with the microphone — label them separately so the mic-permission message below
-      // doesn't get shown for an unrelated failure.
-      console.error("Voice model load failed:", err);
-      setVoiceStatus("");
-      setVoiceError(
-        err?.message === "timeout"
-          ? "Voice model download timed out — check your connection and try again."
-          : `Couldn't load the voice model (${err?.message || err?.name || "unknown error"}).`
-      );
-      setIsListening(false);
-      loadingVoiceRef.current = false;
-      return;
-    }
+    const recognition = new SpeechRecognition();
+    recognition.lang = "es-AR";
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.maxAlternatives = 1;
 
-    try {
-      setVoiceStatus("");
-      if (intentionalStopRef.current) {
-        return; // user backed out while the model was loading
-      }
-      const asr = asrPipelineRef.current;
+    recognition.onresult = (event) => {
+      const aiSpeaking = echoGuardRef.current; // catches echo that arrives after speech ends
+      for (let i = event.resultIndex; i < event.results.length; i += 1) {
+        const result = event.results[i];
+        const transcript = result?.[0]?.transcript?.trim();
+        if (!transcript) continue;
 
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
-      });
-      if (intentionalStopRef.current) {
-        stream.getTracks().forEach((t) => t.stop());
-        return;
-      }
-      micStreamRef.current = stream;
-
-      const mimeType = ["audio/webm;codecs=opus", "audio/webm", "audio/ogg;codecs=opus"].find(
-        (t) => window.MediaRecorder?.isTypeSupported?.(t)
-      );
-      const transcribeBlob = async (blob) => {
-        try {
-          const arrayBuffer = await blob.arrayBuffer();
-          // Decode once at native rate, then render through a 16kHz offline context to
-          // resample — Whisper expects Float32 samples at exactly 16000Hz, and a raw
-          // array passed straight in isn't resampled automatically. AudioContext often
-          // ignores a requested sampleRate on mobile, so OfflineAudioContext (which
-          // strictly honors it) is the reliable way to get there.
-          const decodeCtx = new (window.AudioContext || window.webkitAudioContext)();
-          const decoded = await decodeCtx.decodeAudioData(arrayBuffer);
-          decodeCtx.close().catch(() => {});
-          const OfflineCtx = window.OfflineAudioContext || window.webkitOfflineAudioContext;
-          const offline = new OfflineCtx(1, Math.ceil(decoded.duration * 16000), 16000);
-          const source = offline.createBufferSource();
-          source.buffer = decoded;
-          source.connect(offline.destination);
-          source.start();
-          const rendered = await offline.startRendering();
-          const audio = rendered.getChannelData(0);
-
-          // Peak-normalize: autoGainControl is off (see getUserMedia above), so raw mic
-          // input can be quiet enough that Whisper hears near-silence and returns empty
-          // text even though you clearly said something. This only rescales the numbers
-          // the model sees — it's not a speaker-facing audio filter.
-          let peak = 0;
-          for (let i = 0; i < audio.length; i++) {
-            const abs = Math.abs(audio[i]);
-            if (abs > peak) peak = abs;
+        if (!result.isFinal) {
+          // Barge-in: cut the AI off the instant real speech starts, not when it finishes.
+          if (window.speechSynthesis?.speaking) {
+            window.speechSynthesis.cancel();
+            setIsSpeaking(false);
           }
-          const normalized = peak > 0 && peak < 0.9 ? audio.map((s) => (s / peak) * 0.9) : audio;
-
-          const result = await asr(normalized, { language: "spanish", task: "transcribe" });
-          const text = (result?.text || "").trim();
-          if (!text) return;
-          const words = text.split(/\s+/).filter(Boolean);
-          if (STOP_COMMANDS.test(text) && words.length <= 3) return; // already interrupted in onSpeechStart
-          const now = Date.now();
-          if (now - lastVoiceSendRef.current < 700) return; // guard against a double-fire
-          lastVoiceSendRef.current = now;
-          sendMessage(text);
-        } catch {
-          // transcription failed for this segment — surface it instead of dying silently,
-          // but keep the mic live so the next utterance still gets a chance.
-          setVoiceError("Couldn't hear that clearly — try again.");
+          setMicLevel(0.6); // native API gives no volume signal — just show "hearing you"
+          continue;
         }
-      };
+        setMicLevel(0);
 
-      const startRecording = () => {
-        if (mediaRecorderRef.current) return; // already recording this utterance
-        const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
-        const chunks = [];
-        recorder.ondataavailable = (e) => {
-          if (e.data && e.data.size > 0) chunks.push(e.data);
-        };
-        recorder.onstop = () => {
-          mediaRecorderRef.current = null;
-          if (chunks.length) transcribeBlob(new Blob(chunks, { type: recorder.mimeType }));
-        };
-        mediaRecorderRef.current = recorder;
-        recorder.start();
-      };
+        const confidence = result[0]?.confidence ?? 1;
+        if (confidence < 0.6) continue; // tighter threshold — keyboard clicks/noise score low
 
-      const stopRecording = () => {
-        if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
-          mediaRecorderRef.current.stop();
+        if (aiSpeaking) {
+          if (STOP_COMMANDS.test(transcript)) {
+            window.speechSynthesis.cancel();
+            setIsSpeaking(false);
+          }
+          continue;
         }
-      };
 
-      const { default: hark } = await import("hark");
-      const speechEvents = hark(stream, { threshold: -55, interval: 100, play: false });
-      speechEvents.on("speaking", () => {
-        // Barge-in: the instant real speech is detected, cut the AI off — same
-        // beat real Live products interrupt on.
-        if (window.speechSynthesis?.speaking) {
-          window.speechSynthesis.cancel();
-          setIsSpeaking(false);
-        }
-        startRecording();
-      });
-      speechEvents.on("stopped_speaking", stopRecording);
-      speechEvents.on("volume_change", (dBFS) => {
-        // dBFS ranges roughly -100 (silence) to 0 (loudest) — normalize to 0..1 for the avatar.
-        const level = Math.max(0, Math.min(1, (dBFS + 100) / 100));
-        setMicLevel((prev) => prev + (level - prev) * 0.35);
-      });
+        const words = transcript.split(/\s+/).filter(Boolean);
+        if (STOP_COMMANDS.test(transcript) && words.length <= 3) continue; // already interrupted above
+        const now = Date.now();
+        if (now - lastVoiceSendRef.current < 700) continue; // guard against a double-fire
+        lastVoiceSendRef.current = now;
+        sendMessage(transcript);
+      }
+    };
 
+    recognition.onerror = (event) => {
+      if (event.error === "not-allowed" || event.error === "service-not-allowed") {
+        setVoiceError(
+          "Microphone permission blocked. On Android Chrome: tap the lock icon in the address bar > Permissions > Microphone > Allow, then reload the page. If the app is installed to your home screen, check Android Settings > Apps > this app > Permissions > Microphone too."
+        );
+        intentionalStopRef.current = true;
+      }
+      // "aborted" / "no-speech" / "audio-capture" etc. are recoverable — onend restarts it.
+    };
+
+    recognition.onend = () => {
       if (intentionalStopRef.current) {
-        speechEvents.stop();
-        stream.getTracks().forEach((t) => t.stop());
-        micStreamRef.current = null;
-        setVoiceError("");
+        recognitionRef.current = null;
+        setIsListening(false);
+        setMicLevel(0);
         return;
       }
-      harkRef.current = speechEvents;
-      setVoiceError("");
-      setIsListening(true);
-    } catch (err) {
-      console.error("Live voice setup failed:", err);
-      setVoiceStatus("");
-      setVoiceError(
-        err?.name === "NotAllowedError"
-          ? "Microphone permission blocked. On Android Chrome: tap the lock icon in the address bar > Permissions > Microphone > Allow, then reload the page. If the app is installed to your home screen, check Android Settings > Apps > this app > Permissions > Microphone too."
-          : err?.name === "NotFoundError"
-          ? "No microphone was found on this device."
-          : `Microphone access was blocked or unavailable (${err?.message || err?.name || "unknown error"}).`
-      );
-      setIsListening(false);
-    } finally {
-      loadingVoiceRef.current = false;
-    }
+      // Chrome stops recognition after a silence window — restart it to keep the call "live".
+      try {
+        recognition.start();
+      } catch {
+        recognitionRef.current = null;
+        setIsListening(false);
+      }
+    };
+
+    recognitionRef.current = recognition;
+    recognition.start();
+    setIsListening(true);
   };
 
   const startListening = () => {
@@ -1019,15 +903,11 @@ export default function PersonaChat() {
   useEffect(() => {
     return () => {
       intentionalStopRef.current = true;
-      if (harkRef.current) {
+      if (recognitionRef.current) {
         try {
-          harkRef.current.stop();
+          recognitionRef.current.stop();
         } catch {}
-        harkRef.current = null;
-      }
-      if (micStreamRef.current) {
-        micStreamRef.current.getTracks().forEach((t) => t.stop());
-        micStreamRef.current = null;
+        recognitionRef.current = null;
       }
       stopVideoCall();
     };
@@ -1920,7 +1800,6 @@ export default function PersonaChat() {
                       )}
 
                       {voiceError && <div className="p3call-error">{voiceError}</div>}
-                      {!voiceError && voiceStatus && <div className="p3call-status">{voiceStatus}</div>}
 
                       {messages.length > 0 && (
                         <div className="p3call-caption-wrap">
@@ -2082,7 +1961,6 @@ export default function PersonaChat() {
                     </div>
                   </div>
                   {voiceError && <div className="p3voice-error">{voiceError}</div>}
-                  {!voiceError && voiceStatus && <div className="p3voice-status">{voiceStatus}</div>}
                   {/* Image Upload - Available to all characters */}
                   <div style={{marginBottom: "12px"}}>
                     <button
