@@ -583,7 +583,8 @@ export default function PersonaChat() {
       id: Date.now(),
       timestamp: Date.now(),
       image: uploadedImage?.data || liveFrame || null,
-      imageType: uploadedImage?.type || (liveFrame ? "image/jpeg" : null)
+      imageType: uploadedImage?.type || (liveFrame ? "image/jpeg" : null),
+      fromLiveCall: liveMicMode,
     };
     
     if (typeof overrideInput !== "string") setInput("");
@@ -638,7 +639,7 @@ export default function PersonaChat() {
       const newSuggestions = data?.suggestions || [];
       const fileActionsExecuted = data?.fileActions || [];
       const aiMsgId = Date.now();
-      const aiMsg = { role: "assistant", content: text, id: aiMsgId, timestamp: Date.now(), streaming: true };
+      const aiMsg = { role: "assistant", content: text, id: aiMsgId, timestamp: Date.now(), streaming: true, fromLiveCall: liveMicMode };
       const updated = [...messagesWithUser, aiMsg];
       setMessages(updated);
       setStreamingMsgId(aiMsgId);
@@ -654,10 +655,15 @@ export default function PersonaChat() {
 
       speakAssistant(text);
 
+      // Live-call turns stay client-side only — the whole point of a call is that it
+      // evaporates when you hang up. Filter them out here (not just gate on the current
+      // mode) so a later text message doesn't retroactively persist a past call's turns
+      // that are still sitting in the shared `messages` array.
+      const persistable = updated.filter((m) => !m.fromLiveCall);
       fetch("/api/history", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ charId: selectedChar.id, messages: updated.map((m) => ({ role: m.role, content: m.content, id: m.id })) }),
+        body: JSON.stringify({ charId: selectedChar.id, messages: persistable.map((m) => ({ role: m.role, content: m.content, id: m.id })) }),
       }).catch(() => {});
     } catch (error) {
       clearTimeout(thinkTimerRef.current);

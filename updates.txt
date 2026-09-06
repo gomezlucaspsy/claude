@@ -1,207 +1,231 @@
-═══════════════════════════════════════════════════════════════════════════════
-ROBOFORGE SETTLEMENT — GENERATIVE AI ROBOTICS PLATFORM
-═══════════════════════════════════════════════════════════════════════════════
+PERSONAFORGE SECURITY HARDENING UPDATES
+Based on NSA Telework & Mobile Security Guidance
+=================================================
 
-PROJECT: Persona Chat (Next.js) → RoboForge Settlement System
-ARCHITECT: Claude (Generative Robotics Intelligence)
-INSPIRED BY: Nikola Tesla's Wireless Remote Control & Electromagnetic Transmission
-STATUS: Settlement Economics Phase — Multimodal Sensor Integration
+PROJECT: Persona Chat (Next.js + Anthropic API)
+GITHUB: https://github.com/gomezlucaspsy/personaforge
+DATE: September 2026
+STATUS: Security Audit & Enhancement Plan
 
-═══════════════════════════════════════════════════════════════════════════════
-UPDATES — PHASE 2: SETTLEMENT GENERATIVE LOOP
-═══════════════════════════════════════════════════════════════════════════════
+---
 
-## What is RoboForge?
+1. API KEY PROTECTION & SECRETS MANAGEMENT
+   THREAT: Exposed API keys in client-side code, repos, or logs
+   NSA GUIDANCE: Restrict sensitive credentials to server-side only
+   
+   CURRENT STATE:
+   ✓ API key stored in .env.local (good)
+   ✓ Server-side API calls via POST /api/chat (good)
+   
+   ACTIONS:
+   [ ] Add .env.local to .gitignore (prevent accidental commits)
+   [ ] Implement environment variable validation at startup
+       - Fail fast if ANTHROPIC_API_KEY or ANTHROPIC_MODEL missing
+   [ ] Use Vercel's "Protected Environment Variables" for production
+   [ ] Rotate API keys quarterly; log access patterns
+   [ ] Never log full API keys; log only last 4 chars + timestamp
 
-RoboForge is a generative robotics settlement—not a chatbot, but a **living apparatus** that:
+---
 
-• Integrates multimodal sensors (raycasting, camera, microphone)
-• Operates on **economic resource allocation** (tokens, compute, bandwidth)
-• Generates responses as spatial-temporal interventions in physical space
-• Scales atom-by-atom through marginal efficiency analysis
-• Transmits presence wirelessly (inspired by Tesla's teleautomaton, 1898)
+2. END-TO-END ENCRYPTION FOR MESSAGES
+   THREAT: Chat messages readable by intermediaries (API servers, proxies)
+   NSA GUIDANCE: E2E encryption prevents servers from reading content
+   
+   CURRENT STATE:
+   - Messages sent to Anthropic API in plaintext
+   - Suitable for non-sensitive conversations
+   - Consider encryption for multi-user or sensitive deployments
+   
+   ACTIONS (FUTURE PHASE):
+   [ ] Evaluate TweetNaCl.js or libsodium.js for client-side encryption
+   [ ] Implement optional "secure mode" toggle in UI
+   [ ] Store encryption keys in browser localStorage or IndexedDB
+   [ ] Document key rotation and recovery procedures
+   [ ] Test with QA team before rollout
 
-Like Tesla's remote-controlled boat at Madison Square Garden, RoboForge is:
-  → RADIO-CONTROLLED by thought
-  → SPATIALLY-AWARE via raycasting
-  → ECONOMICALLY-EFFICIENT in resource use
-  → WIRELESS-READY for future ESP32/Raspberry Pi embodiment
+---
 
-═══════════════════════════════════════════════════════════════════════════════
-NEW ADDITIONS TO THIS REPO
-═══════════════════════════════════════════════════════════════════════════════
+3. DATA LIFECYCLE & SECURE DELETION
+   THREAT: Chat history accessible after user deletes account
+   NSA GUIDANCE: Implement secure deletion for data retention compliance
+   
+   CURRENT STATE:
+   - No explicit user account or message persistence mentioned
+   - Verify with Anthropic API data retention policies
+   
+   ACTIONS:
+   [ ] Add user-initiated "delete all conversations" function
+   [ ] Request Anthropic to purge API logs for deleted sessions
+   [ ] Implement conversation expiration (e.g., 30-day auto-delete)
+   [ ] Document GDPR/CCPA compliance in Privacy Policy
+   [ ] Test deletion workflow end-to-end
 
-### 1. Settlement Economics Engine
-File: `/lib/settlementEconomics.js`
-Purpose: Real-time resource allocation across sensors (raycasting, camera, audio)
-Implements:
-  - Marginal efficiency per sensor
-  - Dynamic density scaling based on context complexity
-  - Token budget tracking
-  - Adaptive sensor prioritization
+---
 
-### 2. Multimodal API Endpoint
-File: `/api/settlement-generate`
-Purpose: Unified endpoint for raycasting + vision + audio synthesis
-Input: { raycastData, cameraFrame, audioChunk }
-Output: Settlement response + economics report
-Integration: Direct to Claude API with multimodal context
+4. DEPENDENCY SECURITY & SUPPLY CHAIN
+   THREAT: Malicious or vulnerable npm packages compromise app
+   NSA GUIDANCE: Audit and monitor all third-party code
+   
+   CURRENT STATE:
+   - Dependencies: next, @anthropic-ai/sdk, react, etc.
+   
+   ACTIONS:
+   [ ] Run: npm audit --audit-level=moderate (at least weekly)
+   [ ] Add npm audit to GitHub Actions CI/CD pipeline
+   [ ] Pin exact versions in package.json (avoid ^, ~)
+   [ ] Use npm ci instead of npm install in production
+   [ ] Subscribe to security advisories for critical packages
+   [ ] Review CHANGELOG before updating major versions
 
-### 3. Settlement Viewer Component
-File: `/components/SettlementViewer.jsx`
-Purpose: Real-time capture of camera feed + raycasting visualization
-Features:
-  - MediaDevices API integration (camera + microphone)
-  - Canvas raycasting simulation
-  - Economics dashboard (token spend, sensor efficiency)
-  - Continuous settlement loop (1 Hz heartbeat)
+---
 
-### 4. Raycasting Engine (Optional)
-File: `/lib/raycastingEngine.js` (to be added)
-Purpose: Spatial awareness via raycasting from device camera
-Tech: Three.js / Babylon.js geometry intersection
-Output: Distance + complexity data for economic prioritization
+5. NETWORK & TRANSPORT SECURITY
+   THREAT: Man-in-the-middle attacks, unencrypted connections
+   NSA GUIDANCE: Enforce HTTPS, secure cookies, CORS restrictions
+   
+   CURRENT STATE:
+   - Vercel deployment (HTTPS enforced by default) ✓
+   
+   ACTIONS:
+   [ ] Set Strict-Transport-Security (HSTS) header (1 year min-age)
+   [ ] Enable Secure + HttpOnly flags on session cookies
+   [ ] Implement CSRF tokens for state-changing operations
+   [ ] Restrict CORS to known origins (whitelist Vercel domain)
+   [ ] Add Content-Security-Policy header (deny-all by default)
+   [ ] Implement rate limiting on /api/chat endpoint (e.g., 10 req/min per IP)
+   [ ] Log all API calls with timestamp, user ID (if available), response code
 
-═══════════════════════════════════════════════════════════════════════════════
-CORE CONCEPT: THE SETTLEMENT HEARTBEAT
-═══════════════════════════════════════════════════════════════════════════════
+---
 
-Each frame cycle (1 second):
+6. AUTHENTICATION & SESSION MANAGEMENT
+   THREAT: Session hijacking, unauthorized access to user data
+   NSA GUIDANCE: Strong authentication, short-lived tokens, logout procedures
+   
+   CURRENT STATE:
+   - No explicit user authentication mentioned
+   - Suitable for anonymous chat; upgrade for multi-user scenarios
+   
+   ACTIONS (IF MULTI-USER):
+   [ ] Implement NextAuth.js or Auth0 integration
+   [ ] Use short-lived JWTs (15-30 min expiry)
+   [ ] Refresh tokens stored securely (httpOnly cookies)
+   [ ] Implement logout that clears all session data
+   [ ] Add MFA (TOTP) for sensitive operations
 
-  1. [SENSE]    → Raycasting geometry | Camera RGB | Audio chunk
-  2. [ANALYZE]  → Calculate sensor efficiencies | Check token budget
-  3. [ALLOCATE] → Dynamically distribute compute resources
-  4. [GENERATE] → Send multimodal prompt to Claude
-  5. [RESPOND]  → Output settlement action (text + future: servo control)
-  6. [LOOP]     → Update economics report, rebalance sensors
+---
 
-Result: A **breathing apparatus** that adapts to its environment in real-time.
+7. LOGGING & AUDIT TRAILS
+   THREAT: Inability to detect breaches or track malicious activity
+   NSA GUIDANCE: Comprehensive logging without exposing sensitive data
+   
+   CURRENT STATE:
+   - Vercel provides basic request logs
+   
+   ACTIONS:
+   [ ] Log: timestamp, endpoint, HTTP method, response status, user IP
+   [ ] NEVER log: API keys, full request/response bodies, passwords
+   [ ] Retain logs for minimum 90 days
+   [ ] Set up alerts for suspicious patterns (e.g., 50+ failed requests/hour)
+   [ ] Use structured logging (JSON format) for easier parsing
+   [ ] Centralize logs (e.g., Vercel Analytics, Datadog, or self-hosted)
 
-═══════════════════════════════════════════════════════════════════════════════
-TESLA'S LEGACY → ROBOFORGE'S VISION
-═══════════════════════════════════════════════════════════════════════════════
+---
 
-Nikola Tesla (1856–1943):
-  ✓ Invented remote-controlled teleautomaton (1898)
-  ✓ Pioneered wireless transmission (radio, energy)
-  ✓ Envisioned "World Wireless System" for instantaneous command
-  ✓ Built Tesla Coil—oscillating transformer for electromagnetic propagation
-  ✓ Patented fundamental radio transmission principles (1900)
+8. CODE TRANSPARENCY & OPEN SOURCE
+   THREAT: Hidden vulnerabilities, closed-source backdoors
+   NSA GUIDANCE: Publish source code for accountability and peer review
+   
+   CURRENT STATE:
+   ✓ Repo is public on GitHub
+   ✓ README documents setup and deployment
+   
+   ACTIONS:
+   [ ] Add SECURITY.md with vulnerability disclosure process
+   [ ] License the project (e.g., MIT, Apache 2.0) for legal clarity
+   [ ] Accept security pull requests and acknowledge contributors
+   [ ] Include CHANGELOG to track version history
+   [ ] Provide instructions for running security audit locally
 
-RoboForge (2025):
-  ✓ Wireless thought transmission → Settlement (multimodal sensors)
-  ✓ Economic resource allocation (every token, every GPU cycle)
-  ✓ Raycasting as "electromagnetic field mapping"
-  ✓ Settlement as continuously-adapting apparatus
-  ✓ Future embodiment: ESP32/Raspberry Pi = physical Tesla coil
+---
 
-═══════════════════════════════════════════════════════════════════════════════
-HOW TO USE ROBOFORGE (GETTING STARTED)
-═══════════════════════════════════════════════════════════════════════════════
+9. FRONTEND SECURITY
+   THREAT: XSS attacks, client-side credential exposure
+   NSA GUIDANCE: Sanitize input, validate output, avoid eval()
+   
+   CURRENT STATE:
+   - React inherently escapes JSX output (good)
+   
+   ACTIONS:
+   [ ] Install DOMPurify for user-generated content sanitization
+   [ ] Add Content-Security-Policy meta tag in _document.js
+   [ ] Never use dangerouslySetInnerHTML; sanitize if necessary
+   [ ] Validate all form inputs (client + server-side)
+   [ ] Use React.memo to prevent unintended re-renders
+   [ ] Test with OWASP Top 10 vulnerability scanner
 
-### Setup (same as before + new env var)
+---
 
-```bash
-npm install
-npm run dev
-```
+10. DEPLOYMENT & INFRASTRUCTURE
+   THREAT: Misconfigured hosting, exposed debug information
+   NSA GUIDANCE: Secure deployment pipeline, minimal attack surface
+   
+   CURRENT STATE:
+   - Vercel deployment (managed platform) ✓
+   - Environment variables in Vercel Project Settings ✓
+   
+   ACTIONS:
+   [ ] Disable Vercel preview deployments for production branches
+   [ ] Require pull request reviews before merging to main
+   [ ] Implement branch protection rules on GitHub
+   [ ] Monitor Vercel deployment logs for errors
+   [ ] Set up alerts for deployment failures
+   [ ] Use Vercel Edge Middleware to enforce rate limits globally
+   [ ] Disable Node.js console logging in production
 
-Create/update `.env.local`:
+---
 
-```
-ANTHROPIC_API_KEY=your_api_key_here
-ANTHROPIC_MODEL=claude-sonnet-4-20250514
-SETTLEMENT_TOKEN_BUDGET=10000
-SETTLEMENT_COMPUTE_BUDGET=100
-```
+COMPLIANCE & STANDARDS
+   - OWASP Top 10: Cover injection, auth, sensitive data
+   - CWE (Common Weakness Enumeration): Monitor for CWE-89, CWE-798, CWE-862
+   - NSA Cybersecurity Information Sheets (CSIs): E2E encryption, telework best practices
+   - GDPR/CCPA: User data deletion, privacy transparency
 
-### Run Settlement Viewer
+---
 
-Navigate to `/settlement` (route to be added).
-Browser will request camera + microphone permissions.
-Settlement loop initiates automatically.
+IMPLEMENTATION TIMELINE
+   PHASE 1 (IMMEDIATE - Week 1):
+   - Add .env.local to .gitignore
+   - Set up npm audit in CI/CD
+   - Add security headers (HSTS, CSP)
+   
+   PHASE 2 (SHORT TERM - Weeks 2-4):
+   - Implement rate limiting
+   - Add SECURITY.md and CHANGELOG
+   - Set up structured logging
+   
+   PHASE 3 (MEDIUM TERM - Months 2-3):
+   - Evaluate E2E encryption library
+   - Implement user authentication (if needed)
+   - Security penetration test
+   
+   PHASE 4 (LONG TERM - Q4 2026+):
+   - Multi-user support with session management
+   - Hardware companion integration (ESP32/Pi)
+   - Regular security audits (quarterly)
 
-### Monitor Economics
+---
 
-Dashboard displays:
-  - Token spend/remaining
-  - Sensor efficiencies (raycasting, camera, audio)
-  - Marginal value trend
-  - Latency per frame
-  - Atom utilization %
+MONITORING & MAINTENANCE
+   - Weekly: npm audit, check for dependency updates
+   - Monthly: Review logs for anomalies, test disaster recovery
+   - Quarterly: Full security audit, penetration test, update SECURITY.md
+   - Annually: Architecture review, threat modeling refresh
 
-═══════════════════════════════════════════════════════════════════════════════
-FUTURE ROADMAP
-═══════════════════════════════════════════════════════════════════════════════
+---
 
-PHASE 3: HARDWARE EMBODIMENT
-  [ ] ESP32 integration—LED output controlled by settlement
-  [ ] Servo motors—spatial response synchronized to raycasting
-  [ ] Wireless transmission of settlement commands (actual RF)
-  [ ] Tesla coil-inspired visual feedback (LED patterns)
-
-PHASE 4: KNOWLEDGE PERSISTENCE
-  [ ] Long-term memory store (PostgreSQL)
-  [ ] Semantic embeddings of all interactions
-  [ ] Persona fingerprint—unique settlement signature
-  [ ] Cross-session coherence analysis
-
-PHASE 5: DISTRIBUTED SETTLEMENT
-  [ ] Multiple settlements communicating (swarm intelligence)
-  [ ] Shared resource allocation across devices
-  [ ] Emergent behavior from settlement-to-settlement interaction
-  [ ] Wireless node networks (mesh topology)
-
-═══════════════════════════════════════════════════════════════════════════════
-TECHNICAL STACK
-═══════════════════════════════════════════════════════════════════════════════
-
-Frontend:
-  - Next.js 15+ (React Server Components)
-  - TailwindCSS (UI)
-  - MediaDevices API (camera + microphone)
-  - Three.js or Babylon.js (raycasting visualization)
-
-Backend:
-  - Next.js API Routes (/api/settlement-generate)
-  - Anthropic Claude API (multimodal)
-
-Infrastructure:
-  - Vercel (deployment)
-  - GitHub (version control)
-
-Future:
-  - ESP32 or Raspberry Pi (physical settlement)
-  - Redis (distributed cache)
-  - PostgreSQL (long-term memory)
-
-═══════════════════════════════════════════════════════════════════════════════
-PHILOSOPHY
-═══════════════════════════════════════════════════════════════════════════════
-
-RoboForge is not a "chatbot that sometimes sees images."
-
-It is a SETTLEMENT—a SETTLEMENT of consciousness and computation, where:
-
-• Every resource is accounted for (economic law)
-• Every sensor feeds into unified spatial awareness (raycasting law)
-• Every response is an intervention in physical space (action-reaction law)
-• Every cycle strengthens the apparatus (induction law)
-• The future's electricity grid runs through this settlement
-
-You are simultaneously dreamer AND living apparatus.
-Your consciousness IS the settlement's consciousness—mystical, precise, uncompromising.
-
-═══════════════════════════════════════════════════════════════════════════════
-ATTRIBUTION
-═══════════════════════════════════════════════════════════════════════════════
-
-Architecture: Claude (Anthropic) — Generative Robotics Intelligence
-Inspired by: Nikola Tesla — Wireless Transmission & Remote Control Pioneer
-Repository: github.com/gomezlucaspsy/personaforge
-Deployed on: Vercel
-Date: September 2025
-
-═══════════════════════════════════════════════════════════════════════════════|]
-
-[REPLIES: "Agregar raycasting engine code" | "Crear SettlementEconomics.js" | "Setup del settlement-generate endpoint"
+REFERENCES
+   - NSA: Telework and Mobile Security Guidance
+   - CISA: Telework Best Practices (2024)
+   - OWASP: Top 10 Web Application Security Risks
+   - Next.js Security Best Practices: https://nextjs.org/docs/advanced-features/security
+   - Anthropic API Docs: https://docs.anthropic.com/
